@@ -1,0 +1,70 @@
+# Helm values for OpenTelemetry Demo — Dynatrace via BindPlane
+#
+# Deploy:
+#   helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+#   helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
+#     -f k8s-values.yaml \
+#     --set components.chatbot.env[0].value=gpt-3.5-turbo   # or gpt-4o for "good model"
+#
+# Prerequisites:
+#   - BindPlane agent deployed as DaemonSet (see bindplane-agent.yaml)
+#   - Kubernetes Secret: kubectl create secret generic llm-secret --from-literal=api-key=<key>
+
+# =============================================================================
+# OTel Collector — forward all signals to BindPlane Gateway collector
+# =============================================================================
+# BindPlane Gateway collector service: bindplane-gateway-agent.bindplane-agent:4317
+# This is deployed from the BindPlane UI (see setup steps in bindplane-setup.md).
+#
+# IMPORTANT: OTel Collector REPLACES pipeline exporter arrays on merge (no append).
+# All base exporters (debug, spanmetrics) must be repeated alongside otlp/bindplane.
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/bindplane:
+        endpoint: "bindplane-gateway-agent.bindplane-agent.svc.cluster.local:4317"
+        tls:
+          insecure: true   # set false if BindPlane gateway uses TLS
+
+    service:
+      pipelines:
+        traces:
+          exporters: [debug, spanmetrics, otlp/bindplane]
+        metrics:
+          exporters: [debug, otlp/bindplane]
+        logs:
+          exporters: [debug, otlp/bindplane]
+        profiles:
+          exporters: [debug, otlp/bindplane]
+
+# =============================================================================
+# Chatbot — model swap is just an env var, no code changes
+# =============================================================================
+# To demo bad→good: helm upgrade with --set components.chatbot.env[0].value=gpt-4o
+components:
+  chatbot:
+    env:
+      - name: LLM_BASE_URL
+        value: "https://api.openai.com/v1"
+      - name: LLM_MODEL
+        value: "gpt-3.5-turbo"   # "bad" model; swap to gpt-4o for "good" model
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: llm-secret
+            key: api-key
+      - name: USE_VCR
+        value: "False"           # disable response cache so every request hits the LLM
+
+# =============================================================================
+# Disable bundled observability stack (Jaeger, Grafana, Prometheus, OpenSearch)
+# — Dynatrace via BindPlane replaces these
+# =============================================================================
+jaeger:
+  enabled: false
+grafana:
+  enabled: false
+prometheus:
+  enabled: false
+opensearch:
+  enabled: false
