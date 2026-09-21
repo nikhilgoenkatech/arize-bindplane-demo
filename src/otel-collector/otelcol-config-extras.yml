@@ -1,12 +1,16 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Extras: forward all signals to BindPlane agent.
-# BindPlane routes traces/metrics/logs/profiles to Dynatrace via OTLP.
+# Extras: forward all signals to BindPlane agent (routes to Dynatrace),
+# and send traces to Arize for LLM/AI observability on the chatbot agent.
+#
+# Signal routing:
+#   traces  → BindPlane (→ Dynatrace) + Arize
+#   metrics → BindPlane (→ Dynatrace)
+#   logs    → BindPlane (→ Dynatrace)
 #
 # IMPORTANT: OTel Collector REPLACES pipeline exporter arrays on merge (no append).
-# All exporters from base config (debug, span_metrics) must be repeated here
-# alongside otlp/bindplane to keep them active.
+# All exporters from base config (debug, span_metrics) must be repeated here.
 
 exporters:
   otlp/bindplane:
@@ -14,10 +18,17 @@ exporters:
     tls:
       insecure: true   # set false and add cert config if BindPlane agent uses TLS
 
+  otlphttp/arize:
+    endpoint: "https://otlp.arize.com/v1"
+    headers:
+      "space-id": "${env:ARIZE_SPACE_ID}"
+      "api-key": "${env:ARIZE_API_KEY}"
+      "model-id": "${env:ARIZE_PROJECT_NAME}"
+
 service:
   pipelines:
     traces:
-      exporters: [debug, span_metrics, otlp/bindplane]
+      exporters: [debug, span_metrics, otlp/bindplane, otlphttp/arize]
     metrics:
       exporters: [debug, otlp/bindplane]
     logs:

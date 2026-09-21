@@ -19,6 +19,20 @@
 # IMPORTANT: OTel Collector REPLACES pipeline exporter arrays on merge (no append).
 # All base exporters (debug, spanmetrics) must be repeated alongside otlp/bindplane.
 opentelemetry-collector:
+  extraEnvs:
+    - name: ARIZE_SPACE_ID
+      valueFrom:
+        secretKeyRef:
+          name: arize-secret
+          key: space-id
+    - name: ARIZE_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: arize-secret
+          key: api-key
+    - name: ARIZE_PROJECT_NAME
+      value: "otel-demo-chatbot"
+
   config:
     exporters:
       otlp/bindplane:
@@ -26,10 +40,18 @@ opentelemetry-collector:
         tls:
           insecure: true   # set false if BindPlane gateway uses TLS
 
+    exporters:
+      otlphttp/arize:
+        endpoint: "https://otlp.arize.com/v1"
+        headers:
+          "space-id": "${env:ARIZE_SPACE_ID}"
+          "api-key": "${env:ARIZE_API_KEY}"
+          "model-id": "${env:ARIZE_PROJECT_NAME}"
+
     service:
       pipelines:
         traces:
-          exporters: [debug, spanmetrics, otlp/bindplane]
+          exporters: [debug, spanmetrics, otlp/bindplane, otlphttp/arize]
         metrics:
           exporters: [debug, otlp/bindplane]
         logs:

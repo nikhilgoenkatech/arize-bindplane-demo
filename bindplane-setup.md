@@ -119,7 +119,29 @@ kubectl -n bindplane port-forward svc/bindplane 3001
 
 ---
 
-## Step 5 — Deploy OTel Demo
+## Step 5 — Add Arize as a Second Destination in BindPlane
+
+Arize handles LLM/AI observability for the chatbot agent (traces with GenAI spans).
+The agent service already emits rich LLM spans via traceloop-sdk + opentelemetry-instrumentation-openai/langchain — no code changes needed.
+
+1. In BindPlane UI → **Destinations** → **Add Destination**
+2. Search for **OpenTelemetry (OTLP)** (Arize is not a native destination, use generic OTLP)
+3. Fill in:
+   - **Endpoint**: `https://otlp.arize.com/v1`
+   - **Protocol**: HTTP
+   - **Headers**:
+     - `space-id` → your Arize Space ID (from app.arize.com → Settings → API Keys)
+     - `api-key` → your Arize API key
+     - `model-id` → `otel-demo-chatbot`
+4. Save as `arize-destination`
+
+Then edit your `otel-demo-pipeline` configuration:
+- Add `arize-destination` to the **Traces** pipeline (alongside Dynatrace)
+- Leave Metrics and Logs routed to Dynatrace only (Arize is traces-focused)
+
+---
+
+## Step 6 — Deploy OTel Demo
 
 Now deploy the OTel Demo pointing its collector at the BindPlane gateway:
 
@@ -127,8 +149,14 @@ Now deploy the OTel Demo pointing its collector at the BindPlane gateway:
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo update
 
+# LLM (OpenAI) credentials for the chatbot
 kubectl create secret generic llm-secret \
   --from-literal=api-key=<your-openai-api-key>
+
+# Arize credentials for the collector (traces → Arize)
+kubectl create secret generic arize-secret \
+  --from-literal=space-id=<your-arize-space-id> \
+  --from-literal=api-key=<your-arize-api-key>
 
 helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
   -f k8s-values.yaml
@@ -139,21 +167,27 @@ helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
 ## Architecture Summary
 
 ```
-OTel Demo services (11+ microservices + chatbot)
-        │  OTLP gRPC :4317
-        ▼
-OTel Demo built-in collector
-        │  OTLP gRPC :4317
-        ▼
-BindPlane Gateway Collector          (bindplane-gateway-agent.bindplane-agent:4317)
-│  managed by BindPlane Server via OpAMP
-│  OTLP HTTP → Dynatrace
-        ▼
-Dynatrace  (https://<env-id>.live.dynatrace.com/api/v2/otlp)
+OTel Demo services (11+ microservices)          Agent service (LangGraph + OpenAI)
+        │  OTLP gRPC :4317                       │  OTLP via traceloop-sdk
+        └──────────────────────┬─────────────────┘
+                               ▼
+                  OTel Demo built-in collector
+                               │  OTLP gRPC :4317
+                               ▼
+              BindPlane Gateway Collector    (bindplane-gateway-agent.bindplane-agent:4317)
+              │  managed via OpAMP by BindPlane Server
+              │
+              ├─ OTLP HTTP ──► Dynatrace        (all signals: traces + metrics + logs)
+              │                https://<env-id>.live.dynatrace.com/api/v2/otlp
+              │
+              └─ OTLP HTTP ──► Arize            (traces only: LLM/GenAI spans)
+                               https://otlp.arize.com/v1
 ```
 
-> **Note**: Dynatrace accepts OTLP over **HTTP only** (not gRPC).
-> BindPlane handles this translation internally when you configure the Dynatrace destination.
+> **Notes**:
+> - Dynatrace accepts OTLP over **HTTP only** (not gRPC). BindPlane handles this.
+> - Arize receives traces with GenAI semantic conventions (token counts, prompt/response, model name).
+> - No code changes to the agent service — traceloop-sdk + opentelemetry-instrumentation-openai already emit the right spans.
 
 ---
 
