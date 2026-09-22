@@ -11,19 +11,6 @@
 #      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo -f k8s-values-vanilla.yaml
 
 # =============================================================================
-# Expose frontend-proxy as LoadBalancer (AWS ELB) — persists across helm upgrades
-# =============================================================================
-components:
-  frontendProxy:
-    service:
-      type: LoadBalancer
-
-  loadgenerator:
-    env:
-      - name: LOCUST_BROWSER_USER_WEIGHT
-        value: "0"   # disable browser users that make chatbot/LLM calls
-
-# =============================================================================
 # Disable bundled observability — Dynatrace replaces Jaeger/Grafana/Prometheus
 # =============================================================================
 jaeger:
@@ -66,10 +53,18 @@ opentelemetry-collector:
           exporters: [debug]
 
 # =============================================================================
-# Chatbot — LLM model config
-# Swap LLM_MODEL for the bad/good model demo (no other changes needed)
+# Component overrides
 # =============================================================================
 components:
+  frontendProxy:
+    service:
+      type: LoadBalancer
+
+  loadgenerator:
+    env:
+      - name: LOCUST_BROWSER_USER_WEIGHT
+        value: "0"   # disable browser users that make chatbot/LLM calls
+
   accounting:
     resources:
       limits:
