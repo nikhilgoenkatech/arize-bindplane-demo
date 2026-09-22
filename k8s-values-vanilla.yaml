@@ -71,6 +71,20 @@ components:
       limits:
         memory: "512Mi"
 
+  agent:
+    env:
+      - name: LLM_BASE_URL
+        value: "https://api.openai.com/v1"
+      - name: LLM_MODEL
+        value: "gpt-4o"
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: llm-secret
+            key: api-key
+      - name: USE_VCR
+        value: "False"   # no gpt-4o cassette in image; VCR=True causes 500 on cache miss
+
   chatbot:
     env:
       - name: CHATBOT_PORT
