@@ -39,9 +39,7 @@ opentelemetry-collector:
       # Disable self-telemetry — no standalone otel-collector service in Helm deployment
       telemetry:
         metrics:
-          readers: []
-        logs:
-          processors: []
+          level: none
 
       pipelines:
         traces:
