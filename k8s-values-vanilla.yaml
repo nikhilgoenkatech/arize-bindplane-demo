@@ -66,6 +66,10 @@ components:
     env:
       - name: CHATBOT_PORT
         value: "7860"   # override K8s service-discovery injection (tcp://...:7860)
+      - name: CHATBOT_ROOT_PATH
+        value: "/chatbot"   # required for Gradio to use correct API paths behind proxy
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://otel-collector:4318"   # collector service in this namespace
       - name: LLM_BASE_URL
         value: "https://api.openai.com/v1"
       - name: LLM_MODEL
