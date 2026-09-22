@@ -57,6 +57,11 @@ opentelemetry-collector:
 # Swap LLM_MODEL for the bad/good model demo (no other changes needed)
 # =============================================================================
 components:
+  accounting:
+    resources:
+      limits:
+        memory: "512Mi"
+
   chatbot:
     env:
       - name: CHATBOT_PORT
