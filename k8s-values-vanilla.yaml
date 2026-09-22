@@ -11,6 +11,14 @@
 #      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo -f k8s-values-vanilla.yaml
 
 # =============================================================================
+# Expose frontend-proxy as LoadBalancer (AWS ELB) — persists across helm upgrades
+# =============================================================================
+components:
+  frontendProxy:
+    service:
+      type: LoadBalancer
+
+# =============================================================================
 # Disable bundled observability — Dynatrace replaces Jaeger/Grafana/Prometheus
 # =============================================================================
 jaeger:
