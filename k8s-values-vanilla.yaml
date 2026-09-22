@@ -1,0 +1,84 @@
+# Helm values — OTel Demo vanilla setup with Dynatrace
+#
+# Prerequisites:
+#   1. Create API token in Dynatrace UI:
+#      Settings → Access Tokens → Generate token
+#      Scopes: metrics.ingest, logs.ingest, openTelemetryTrace.ingest
+#
+#   2. Create Kubernetes secrets:
+#      kubectl create secret generic dynatrace-secret \
+#        --from-literal=environment-id=<your-env-id> \
+#        --from-literal=api-token=<your-api-token>
+#
+#      kubectl create secret generic llm-secret \
+#        --from-literal=api-key=<your-openai-api-key>
+#
+#   3. Deploy:
+#      helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+#      helm repo update
+#      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo -f k8s-values-vanilla.yaml
+
+# =============================================================================
+# Disable bundled observability — Dynatrace replaces Jaeger/Grafana/Prometheus
+# =============================================================================
+jaeger:
+  enabled: false
+grafana:
+  enabled: false
+prometheus:
+  enabled: false
+opensearch:
+  enabled: false
+
+# =============================================================================
+# OTel Collector — send all signals directly to Dynatrace via OTLP HTTP
+# =============================================================================
+opentelemetry-collector:
+  extraEnvs:
+    - name: DT_ENVIRONMENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: dynatrace-secret
+          key: environment-id
+    - name: DT_API_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: dynatrace-secret
+          key: api-token
+
+  config:
+    exporters:
+      otlphttp/dynatrace:
+        endpoint: "https://${env:DT_ENVIRONMENT_ID}.live.dynatrace.com/api/v2/otlp"
+        headers:
+          "Authorization": "Api-Token ${env:DT_API_TOKEN}"
+
+    service:
+      pipelines:
+        traces:
+          exporters: [debug, spanmetrics, otlphttp/dynatrace]
+        metrics:
+          exporters: [debug, otlphttp/dynatrace]
+        logs:
+          exporters: [debug, otlphttp/dynatrace]
+        profiles:
+          exporters: [debug]
+
+# =============================================================================
+# Chatbot — LLM model config
+# Swap LLM_MODEL for the bad/good model demo (no other changes needed)
+# =============================================================================
+components:
+  chatbot:
+    env:
+      - name: LLM_BASE_URL
+        value: "https://api.openai.com/v1"
+      - name: LLM_MODEL
+        value: "gpt-4o"
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: llm-secret
+            key: api-key
+      - name: USE_VCR
+        value: "False"
