@@ -1,19 +1,11 @@
 # Helm values — OTel Demo vanilla setup with Dynatrace
 #
 # Prerequisites:
-#   1. Create API token in Dynatrace UI:
-#      Settings → Access Tokens → Generate token
-#      Scopes: metrics.ingest, logs.ingest, openTelemetryTrace.ingest
-#
-#   2. Create Kubernetes secrets:
-#      kubectl create secret generic dynatrace-secret \
-#        --from-literal=environment-id=<your-env-id> \
-#        --from-literal=api-token=<your-api-token>
-#
+#   1. Create LLM secret:
 #      kubectl create secret generic llm-secret \
 #        --from-literal=api-key=<your-openai-api-key>
 #
-#   3. Deploy:
+#   2. Deploy:
 #      helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 #      helm repo update
 #      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo -f k8s-values-vanilla.yaml
@@ -31,36 +23,26 @@ opensearch:
   enabled: false
 
 # =============================================================================
-# OTel Collector — send all signals directly to Dynatrace via OTLP HTTP
+# OTel Collector — forward all signals to Dynatrace telemetry-ingest collector
+# Already running in cluster: telemetry-ingest.dynatrace.svc.cluster.local:4317
+# No API token needed — the DT collector handles auth to Dynatrace.
 # =============================================================================
 opentelemetry-collector:
-  extraEnvs:
-    - name: DT_ENVIRONMENT_ID
-      valueFrom:
-        secretKeyRef:
-          name: dynatrace-secret
-          key: environment-id
-    - name: DT_API_TOKEN
-      valueFrom:
-        secretKeyRef:
-          name: dynatrace-secret
-          key: api-token
-
   config:
     exporters:
-      otlphttp/dynatrace:
-        endpoint: "https://${env:DT_ENVIRONMENT_ID}.live.dynatrace.com/api/v2/otlp"
-        headers:
-          "Authorization": "Api-Token ${env:DT_API_TOKEN}"
+      otlp/dynatrace:
+        endpoint: "telemetry-ingest.dynatrace.svc.cluster.local:4317"
+        tls:
+          insecure: true
 
     service:
       pipelines:
         traces:
-          exporters: [debug, spanmetrics, otlphttp/dynatrace]
+          exporters: [debug, spanmetrics, otlp/dynatrace]
         metrics:
-          exporters: [debug, otlphttp/dynatrace]
+          exporters: [debug, otlp/dynatrace]
         logs:
-          exporters: [debug, otlphttp/dynatrace]
+          exporters: [debug, otlp/dynatrace]
         profiles:
           exporters: [debug]
 
