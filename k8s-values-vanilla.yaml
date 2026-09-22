@@ -38,7 +38,7 @@ opentelemetry-collector:
     service:
       pipelines:
         traces:
-          exporters: [debug, spanmetrics, otlp/dynatrace]
+          exporters: [debug, otlp/dynatrace]
         metrics:
           exporters: [debug, otlp/dynatrace]
         logs:
