@@ -75,6 +75,10 @@ components:
     env:
       - name: CHATBOT_PORT
         value: "7860"   # override K8s service-discovery injection (tcp://...:7860)
+      - name: AGENT_PORT
+        value: "8010"   # override K8s service-discovery injection (tcp://...:8010)
+      - name: AGENT_ENDPOINT
+        value: "agent"  # explicit hostname to prevent 0.0.0.0 fallback
       - name: CHATBOT_ROOT_PATH
         value: "/chatbot"   # required for Gradio to use correct API paths behind proxy
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
