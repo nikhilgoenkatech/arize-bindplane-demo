@@ -84,6 +84,16 @@ components:
             key: api-key
       - name: USE_VCR
         value: "False"   # no gpt-4o cassette in image; VCR=True causes 500 on cache miss
+      - name: AGENT_PORT
+        value: "8010"    # override K8s service-discovery injection (tcp://...:8010)
+      - name: FLAGD_PORT
+        value: "8013"    # override K8s service-discovery injection (tcp://...:8013)
+      - name: TRACELOOP_API_KEY
+        value: "noop"    # required by traceloop-sdk even when using custom TRACELOOP_BASE_URL
+      - name: TRACELOOP_BASE_URL
+        value: "http://otel-collector:4318"   # explicit override; $(OTEL_COLLECTOR_NAME) substitution unreliable
+      - name: APPLICATION_ENDPOINT
+        value: "frontend:8080"   # dropped when custom env list overrides chart defaults
 
   chatbot:
     env:
