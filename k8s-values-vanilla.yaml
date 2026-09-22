@@ -53,6 +53,8 @@ opentelemetry-collector:
 components:
   chatbot:
     env:
+      - name: CHATBOT_PORT
+        value: "7860"   # override K8s service-discovery injection (tcp://...:7860)
       - name: LLM_BASE_URL
         value: "https://api.openai.com/v1"
       - name: LLM_MODEL
