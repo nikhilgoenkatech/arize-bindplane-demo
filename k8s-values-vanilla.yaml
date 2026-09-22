@@ -18,6 +18,11 @@ components:
     service:
       type: LoadBalancer
 
+  loadgenerator:
+    env:
+      - name: LOCUST_BROWSER_USER_WEIGHT
+        value: "0"   # disable browser users that make chatbot/LLM calls
+
 # =============================================================================
 # Disable bundled observability — Dynatrace replaces Jaeger/Grafana/Prometheus
 # =============================================================================
