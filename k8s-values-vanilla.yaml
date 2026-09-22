@@ -36,9 +36,17 @@ opentelemetry-collector:
           insecure: true
 
     service:
+      # Disable self-telemetry — no standalone otel-collector service in Helm deployment
+      telemetry:
+        metrics:
+          readers: []
+        logs:
+          processors: []
+
       pipelines:
         traces:
-          exporters: [debug, otlp/dynatrace]
+          # span_metrics must stay here — it is also a receiver in the metrics pipeline
+          exporters: [debug, span_metrics, otlp/dynatrace]
         metrics:
           exporters: [debug, otlp/dynatrace]
         logs:
