@@ -1,0 +1,123 @@
+# Helm values — OTel Demo with Dynatrace via BindPlane gateway
+#
+# Prerequisites:
+#   1. BindPlane gateway deployed and connected (see bindplane-setup.md)
+#      kubectl apply -f bindplane-agent.yaml      # BindPlane-generated manifest
+#      kubectl apply -f bindplane-gateway-svc.yaml # Service exposing port 4317
+#
+#   2. Create LLM secret:
+#      kubectl create secret generic llm-secret \
+#        --from-literal=api-key=<your-openai-api-key>
+#
+#   3. Deploy:
+#      helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+#      helm repo update
+#      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
+#        -f k8s-values-bindplane.yaml -n llm-obs-demo
+
+# =============================================================================
+# Disable bundled observability — Dynatrace (via BindPlane) replaces these
+# =============================================================================
+jaeger:
+  enabled: false
+grafana:
+  enabled: false
+prometheus:
+  enabled: false
+opensearch:
+  enabled: false
+
+# =============================================================================
+# OTel Collector — forward all signals to BindPlane gateway
+# BindPlane gateway receives OTLP and routes to Dynatrace (configured in UI).
+# Service: bindplane-gateway.bindplane-agent.svc.cluster.local:4317
+# =============================================================================
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/bindplane:
+        endpoint: "bindplane-gateway.bindplane-agent.svc.cluster.local:4317"
+        tls:
+          insecure: true
+
+    service:
+      telemetry:
+        metrics:
+          level: none
+
+      pipelines:
+        traces:
+          exporters: [debug, span_metrics, otlp/bindplane]
+        metrics:
+          exporters: [debug, otlp/bindplane]
+        logs:
+          exporters: [debug, otlp/bindplane]
+        profiles:
+          exporters: [debug]
+
+# =============================================================================
+# Component overrides (identical to vanilla — only the collector destination changed)
+# =============================================================================
+components:
+  frontend-proxy:
+    service:
+      type: LoadBalancer
+      port: 8080
+
+  load-generator:
+    env:
+      - name: LOCUST_BROWSER_USER_WEIGHT
+        value: "0"
+
+  accounting:
+    resources:
+      limits:
+        memory: "512Mi"
+
+  agent:
+    env:
+      - name: LLM_BASE_URL
+        value: "https://api.openai.com/v1"
+      - name: LLM_MODEL
+        value: "gpt-4o"
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: llm-secret
+            key: api-key
+      - name: USE_VCR
+        value: "False"
+      - name: AGENT_PORT
+        value: "8010"
+      - name: FLAGD_PORT
+        value: "8013"
+      - name: TRACELOOP_API_KEY
+        value: "noop"
+      - name: TRACELOOP_BASE_URL
+        value: "http://otel-collector:4318"
+      - name: APPLICATION_ENDPOINT
+        value: "frontend:8080"
+
+  chatbot:
+    env:
+      - name: CHATBOT_PORT
+        value: "7860"
+      - name: AGENT_PORT
+        value: "8010"
+      - name: AGENT_ENDPOINT
+        value: "agent"
+      - name: CHATBOT_ROOT_PATH
+        value: "/chatbot"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://otel-collector:4318"
+      - name: LLM_BASE_URL
+        value: "https://api.openai.com/v1"
+      - name: LLM_MODEL
+        value: "gpt-4o"
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: llm-secret
+            key: api-key
+      - name: USE_VCR
+        value: "False"
