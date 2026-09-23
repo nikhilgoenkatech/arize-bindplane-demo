@@ -70,6 +70,8 @@ components:
         value: "0"
 
   accounting:
+    podAnnotations:
+      oneagent.dynatrace.com/inject: "false"   # OneAgent injection causes SIGSEGV with .NET 9
     resources:
       limits:
         memory: "512Mi"
