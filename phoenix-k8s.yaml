@@ -60,6 +60,7 @@ metadata:
   name: phoenix
   namespace: phoenix
 spec:
+  type: LoadBalancer
   selector:
     app: phoenix
   ports:
