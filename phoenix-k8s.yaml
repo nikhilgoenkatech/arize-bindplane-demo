@@ -39,6 +39,8 @@ spec:
             - containerPort: 4317
               name: otlp-grpc
           env:
+            - name: PHOENIX_PORT
+              value: "6006"   # override K8s service-discovery injection (tcp://...:6006)
             - name: PHOENIX_WORKING_DIR
               value: "/tmp/phoenix"
           resources:
