@@ -66,6 +66,8 @@ components:
 
   load-generator:
     env:
+      - name: LOCUST_HOST
+        value: "http://frontend-proxy:8080"   # dropped when custom env list overrides chart defaults
       - name: LOCUST_BROWSER_USER_WEIGHT
         value: "0"
 
