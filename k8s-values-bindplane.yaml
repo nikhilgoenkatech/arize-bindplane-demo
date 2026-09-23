@@ -39,6 +39,10 @@ opentelemetry-collector:
         endpoint: "bindplane-gateway.bindplane-agent.svc.cluster.local:4317"
         tls:
           insecure: true
+      otlphttp/phoenix:
+        endpoint: "http://phoenix.phoenix.svc.cluster.local:6006"
+        tls:
+          insecure: true
 
     service:
       telemetry:
@@ -47,7 +51,7 @@ opentelemetry-collector:
 
       pipelines:
         traces:
-          exporters: [debug, span_metrics, otlp/bindplane]
+          exporters: [debug, span_metrics, otlp/bindplane, otlphttp/phoenix]
         metrics:
           exporters: [debug, otlp/bindplane]
         logs:
