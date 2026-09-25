@@ -1,4 +1,4 @@
-# Helm values — OTel Demo with Dynatrace via BindPlane gateway
+# Helm values — OTel Demo with Dynatrace via BindPlane gateway + Arize AX LLM observability
 #
 # Prerequisites:
 #   1. BindPlane gateway deployed and connected (see bindplane-setup.md)
@@ -9,7 +9,13 @@
 #      kubectl create secret generic llm-secret \
 #        --from-literal=api-key=<your-openai-api-key>
 #
-#   3. Deploy:
+#   3. Create Arize AX secret (Space ID and API key from https://app.arize.com → Settings → API Keys):
+#      kubectl create secret generic arize-secret \
+#        --from-literal=space-id=<your-arize-space-id> \
+#        --from-literal=api-key=<your-arize-api-key> \
+#        -n llm-obs-demo
+#
+#   4. Deploy:
 #      helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 #      helm repo update
 #      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
@@ -28,17 +34,40 @@ opensearch:
   enabled: false
 
 # =============================================================================
-# OTel Collector — forward all signals to BindPlane gateway
-# BindPlane gateway receives OTLP and routes to Dynatrace (configured in UI).
-# Service: bindplane-gateway.bindplane-agent.svc.cluster.local:4317
+# OTel Collector — fan out to BindPlane (→ Dynatrace) and Arize AX (LLM eval)
+#
+# Signal flow:
+#   traces  → BindPlane → Dynatrace  (ops + raw telemetry)
+#   traces  → Arize AX               (LLM evaluation, developer lens)
+#   metrics → BindPlane → Dynatrace
+#   logs    → BindPlane → Dynatrace
+#
+# Arize AX credentials are injected from the arize-secret K8s secret.
 # =============================================================================
 opentelemetry-collector:
+  extraEnvs:
+    - name: ARIZE_SPACE_ID
+      valueFrom:
+        secretKeyRef:
+          name: arize-secret
+          key: space-id
+    - name: ARIZE_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: arize-secret
+          key: api-key
+
   config:
     exporters:
       otlp/bindplane:
         endpoint: "bindplane-gateway.bindplane-agent.svc.cluster.local:4317"
         tls:
           insecure: true
+      otlp/arize:
+        endpoint: "otlp.arize.com:443"
+        headers:
+          space_id: "${env:ARIZE_SPACE_ID}"
+          api_key: "${env:ARIZE_API_KEY}"
       otlphttp/phoenix:
         endpoint: "http://phoenix.phoenix.svc.cluster.local:6006"
         tls:
@@ -51,7 +80,7 @@ opentelemetry-collector:
 
       pipelines:
         traces:
-          exporters: [debug, span_metrics, otlp/bindplane, otlphttp/phoenix]
+          exporters: [debug, span_metrics, otlp/bindplane, otlp/arize, otlphttp/phoenix]
         metrics:
           exporters: [debug, otlp/bindplane]
         logs:
