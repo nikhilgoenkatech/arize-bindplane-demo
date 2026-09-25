@@ -68,6 +68,7 @@ opentelemetry-collector:
         headers:
           space_id: "${env:ARIZE_SPACE_ID}"
           api_key: "${env:ARIZE_API_KEY}"
+          x-project-name: "astronomy-shop-agent"
       otlphttp/phoenix:
         endpoint: "http://phoenix.phoenix.svc.cluster.local:6006"
         tls:
