@@ -2,73 +2,47 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Upload golden examples from VCR cassettes to Arize AX as a labeled dataset.
-#
-# Each row captures the full engineer-defined contract for a user prompt:
-#   - expected_tool        : which tool should be called
-#   - expected_tool_args   : exact JSON arguments the tool should receive
-#   - tool_output          : what the tool actually returned (ground truth from API)
-#   - expected_facts       : key factual strings the response MUST contain
-#   - output               : the golden final answer from the cassette
-#
-# The experiment then validates live agent behaviour against this contract.
+# Upload golden examples from VCR cassettes to Phoenix as a labeled dataset.
+# Uses Phoenix REST API directly — no arize-phoenix SDK required.
 #
 # Usage:
-#   pip install -r arize/requirements.txt
-#   export ARIZE_API_KEY=<from Arize AX → Settings → API Keys>
-#   export ARIZE_ENDPOINT=https://app.arize.com   # default
-#   python arize/arize-dataset.py
+#   pip install requests pyyaml
+#   # port-forward first: bash arize/port-forward.sh
+#   python3 arize/arize-dataset.py
 
 import json
 import os
 import sys
 from pathlib import Path
 
-import pandas as pd
+import requests
 import yaml
-import phoenix as px
 
 CASSETTE_DIR = Path(__file__).parent.parent / "src/agent/fixtures/vcr_cassettes"
 DATASET_NAME = "astronomy-shop-golden"
-# Self-hosted Phoenix (already running in cluster): port-forward svc/phoenix 6006:6006 -n phoenix
-# Arize cloud: set to https://app.arize.com and also set ARIZE_API_KEY
-ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
+PHOENIX_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
 
 
 def extract_expected_facts(tool_name: str, tool_output_str: str) -> list[str]:
-    """
-    Derive key factual strings the agent's response must contain.
-    These are extracted from the actual tool output — not invented.
-    """
     try:
         data = json.loads(tool_output_str)
     except (json.JSONDecodeError, TypeError):
         return []
 
     facts: list[str] = []
-
     if tool_name == "list_products" and isinstance(data, list):
-        # Response must name every product returned by the API
-        for product in data:
-            if name := product.get("name"):
-                facts.append(name)
-
+        facts = [p["name"] for p in data if p.get("name")]
     elif tool_name == "get_supported_currencies" and isinstance(data, list):
-        # Response must include the major currencies at minimum
         major = {"USD", "EUR", "GBP", "JPY", "CAD", "AUD"}
         facts = [c for c in data if c in major]
-
     elif tool_name == "get_ads" and isinstance(data, list):
-        # Response must surface every promotion text and linked product ID
         for ad in data:
             if text := ad.get("text"):
                 facts.append(text)
             if url := ad.get("redirectUrl"):
-                # extract product ID from /product/<id>
                 product_id = url.rstrip("/").split("/")[-1]
                 if product_id:
                     facts.append(product_id)
-
     return facts
 
 
@@ -84,14 +58,12 @@ def parse_cassette(path: Path) -> list[dict]:
         req_body = json.loads(interactions[i]["request"]["body"])
         messages = req_body["messages"]
 
-        # New conversation: only [system, user] — no prior assistant/tool turns
         non_system = [m for m in messages if m["role"] != "system"]
         if len(non_system) != 1 or non_system[0]["role"] != "user":
             i += 1
             continue
 
         user_input = non_system[0]["content"]
-
         resp_body = json.loads(interactions[i]["response"]["body"]["string"])
         llm_choice = resp_body["choices"][0]["message"]
 
@@ -117,14 +89,13 @@ def parse_cassette(path: Path) -> list[dict]:
         final_answer = final_resp["choices"][0]["message"].get("content", "")
 
         if final_answer:
-            expected_facts = extract_expected_facts(tool_name, tool_output)
             examples.append({
                 "input": user_input,
                 "output": final_answer,
                 "expected_tool": tool_name,
                 "expected_tool_args": json.dumps(tool_args),
                 "tool_output": tool_output,
-                "expected_facts": json.dumps(expected_facts),
+                "expected_facts": json.dumps(extract_expected_facts(tool_name, tool_output)),
                 "source_model": req_body.get("model", "unknown"),
             })
 
@@ -133,53 +104,82 @@ def parse_cassette(path: Path) -> list[dict]:
     return examples
 
 
+def create_or_get_dataset(name: str) -> str:
+    resp = requests.get(f"{PHOENIX_ENDPOINT}/v1/datasets", timeout=10)
+    resp.raise_for_status()
+    for ds in resp.json().get("data", []):
+        if ds["name"] == name:
+            print(f"Dataset '{name}' already exists (id={ds['id']}), will append examples.")
+            return ds["id"]
+
+    resp = requests.post(
+        f"{PHOENIX_ENDPOINT}/v1/datasets",
+        json={"name": name, "description": "Golden examples from VCR cassettes — engineer-defined contracts"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    dataset_id = resp.json()["data"]["id"]
+    print(f"Created dataset '{name}' (id={dataset_id})")
+    return dataset_id
+
+
+def upload_examples(dataset_id: str, examples: list[dict]) -> None:
+    payload = {
+        "examples": [
+            {
+                "input": {"message": ex["input"]},
+                "output": {"response": ex["output"]},
+                "metadata": {
+                    "expected_tool": ex["expected_tool"],
+                    "expected_tool_args": ex["expected_tool_args"],
+                    "tool_output": ex["tool_output"],
+                    "expected_facts": ex["expected_facts"],
+                    "source_model": ex["source_model"],
+                },
+            }
+            for ex in examples
+        ]
+    }
+    resp = requests.post(
+        f"{PHOENIX_ENDPOINT}/v1/datasets/{dataset_id}/examples",
+        json=payload,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    print(f"Uploaded {len(examples)} examples.")
+
+
 def main():
-    api_key = os.environ.get("ARIZE_API_KEY")  # optional for self-hosted Phoenix
-    client = px.Client(endpoint=ARIZE_ENDPOINT, **( {"api_key": api_key} if api_key else {}))
+    print(f"Phoenix endpoint: {PHOENIX_ENDPOINT}")
+
+    # Verify Phoenix is reachable
+    try:
+        requests.get(f"{PHOENIX_ENDPOINT}/healthz", timeout=5)
+    except Exception:
+        print("ERROR: Cannot reach Phoenix. Run: bash arize/port-forward.sh")
+        sys.exit(1)
 
     all_examples: list[dict] = []
     for cassette_file in sorted(CASSETTE_DIR.glob("*.yaml")):
         print(f"Parsing {cassette_file.name}...")
-        examples = parse_cassette(cassette_file)
-        print(f"  {len(examples)} examples found")
-        all_examples.extend(examples)
+        found = parse_cassette(cassette_file)
+        print(f"  {len(found)} examples")
+        all_examples.extend(found)
 
-    # Keep first occurrence of each unique user prompt
+    # Deduplicate by input
     seen: set[str] = set()
-    unique = []
-    for ex in all_examples:
-        if ex["input"] not in seen:
-            seen.add(ex["input"])
-            unique.append(ex)
+    unique = [ex for ex in all_examples if not (ex["input"] in seen or seen.add(ex["input"]))]
 
-    df = pd.DataFrame(unique)
+    print(f"\nGolden contract ({len(unique)} examples):")
+    for ex in unique:
+        facts = json.loads(ex["expected_facts"])
+        print(f"  [{ex['expected_tool']}({ex['expected_tool_args']})] {ex['input'][:50]}")
+        print(f"    facts: {facts[:2]}{'...' if len(facts) > 2 else ''}")
 
-    print(f"\n{'='*60}")
-    print(f"Golden dataset: {len(df)} examples\n")
-    for _, row in df.iterrows():
-        print(f"  INPUT : {row['input']}")
-        print(f"  TOOL  : {row['expected_tool']}({row['expected_tool_args']})")
-        facts = json.loads(row["expected_facts"])
-        print(f"  FACTS : {facts[:3]}{'...' if len(facts) > 3 else ''}")
-        print()
-    print("="*60)
+    dataset_id = create_or_get_dataset(DATASET_NAME)
+    upload_examples(dataset_id, unique)
 
-    print(f"\nUploading to Arize AX as '{DATASET_NAME}'...")
-    dataset = client.upload_dataset(
-        dataset_name=DATASET_NAME,
-        dataframe=df,
-        input_keys=["input"],
-        output_keys=["output"],
-        metadata_keys=[
-            "expected_tool",
-            "expected_tool_args",
-            "tool_output",
-            "expected_facts",
-            "source_model",
-        ],
-    )
-    print(f"Done. Dataset '{dataset.name}' uploaded ({len(df)} rows).")
-    print(f"View: {ARIZE_ENDPOINT}/projects/astronomy-shop-agent/datasets")
+    print(f"\nDone. View at: {PHOENIX_ENDPOINT}/datasets")
 
 
 if __name__ == "__main__":

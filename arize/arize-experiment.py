@@ -2,59 +2,87 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Run Arize AX experiments against the astronomy-shop-golden dataset.
+# Run experiments against the astronomy-shop-golden dataset.
+# Uses Phoenix REST API directly — no arize-phoenix SDK required.
+# LLM-as-judge evaluators use the openai package directly.
 #
-# Validates live agent behaviour against the engineer-defined contract:
-#
-#   Evaluator              Type        What it checks
-#   ─────────────────────  ──────────  ─────────────────────────────────────────
-#   tool_selection         code        Did agent call the right tool?
-#   tool_args_match        code        Did agent pass the correct JSON arguments?
-#   response_facts         code        Does response contain all expected facts
-#                                      (product names, currencies, promo text)?
-#   faithfulness           LLM judge   Any hallucinated claims not in tool output?
-#   completeness           LLM judge   Did response omit important items?
-#
-# The first three evaluators require no LLM — they assert exact structural
-# correctness derived from the cassette contract.  The LLM judges catch
-# subtler quality issues in the free-text response.
+# Evaluators:
+#   tool_selection  [code]  Did agent call the right tool?
+#   tool_args_match [code]  Correct JSON arguments?
+#   response_facts  [code]  All expected facts in response?
+#   faithfulness    [LLM]   Any hallucinated claims?
+#   completeness    [LLM]   Any important items omitted?
 #
 # Usage:
-#   pip install -r arize/requirements.txt
-#   export ARIZE_API_KEY=<from Arize AX → Settings → API Keys>
-#   export OPENAI_API_KEY=<your-openai-key>
-#   export AGENT_ENDPOINT=http://localhost:8010   # port-forward the agent svc
-#       kubectl port-forward svc/agent 8010:8010 -n llm-obs-demo
-#   export ARIZE_ENDPOINT=https://app.arize.com   # default
-#   python arize/arize-experiment.py
+#   pip install requests openai pyyaml
+#   bash arize/port-forward.sh
+#   export OPENAI_API_KEY=<your-key>
+#   python3 arize/arize-experiment.py
 
 import json
 import os
 import sys
+import time
 
-import pandas as pd
 import requests
-import phoenix as px
-from phoenix.evals import OpenAIModel, llm_classify
-from phoenix.experiments import run_experiment
+from openai import OpenAI
 
 DATASET_NAME = "astronomy-shop-golden"
-EXPERIMENT_NAME = "astronomy-shop-agent-eval"
-# Self-hosted Phoenix (already running in cluster): port-forward svc/phoenix 6006:6006 -n phoenix
-# Arize cloud: set to https://app.arize.com and also set ARIZE_API_KEY
-ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
+PHOENIX_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
 AGENT_ENDPOINT = os.getenv("AGENT_ENDPOINT", "http://localhost:8010")
 
 
-# ── Task ─────────────────────────────────────────────────────────────────────
+# ── Phoenix REST helpers ──────────────────────────────────────────────────────
 
-def call_live_agent(example: dict) -> dict:
-    """Send the golden input to the live agent; return response + tool used + args."""
-    url = f"{AGENT_ENDPOINT}/prompt"
+def get_dataset(name: str) -> dict:
+    resp = requests.get(f"{PHOENIX_ENDPOINT}/v1/datasets", timeout=10)
+    resp.raise_for_status()
+    for ds in resp.json().get("data", []):
+        if ds["name"] == name:
+            return ds
+    raise ValueError(f"Dataset '{name}' not found. Run arize-dataset.py first.")
+
+
+def get_examples(dataset_id: str) -> list[dict]:
+    resp = requests.get(f"{PHOENIX_ENDPOINT}/v1/datasets/{dataset_id}/examples", timeout=10)
+    resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+def create_experiment(dataset_id: str, name: str) -> str:
+    resp = requests.post(
+        f"{PHOENIX_ENDPOINT}/v1/experiments",
+        json={"dataset_id": dataset_id, "name": name},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["data"]["id"]
+
+
+def post_run(experiment_id: str, example_id: str, output: dict, evals: dict) -> None:
+    payload = {
+        "example_id": example_id,
+        "output": output,
+        "annotations": [
+            {"name": k, "score": v["score"], "label": v["label"], "explanation": v.get("explanation", "")}
+            for k, v in evals.items()
+        ],
+    }
+    resp = requests.post(
+        f"{PHOENIX_ENDPOINT}/v1/experiments/{experiment_id}/runs",
+        json=payload,
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+
+# ── Task: call live agent ─────────────────────────────────────────────────────
+
+def call_live_agent(message: str) -> dict:
     try:
         resp = requests.post(
-            url,
-            json={"message": example["input"], "history": []},
+            f"{AGENT_ENDPOINT}/prompt",
+            json={"message": message, "history": []},
             timeout=60,
         )
         resp.raise_for_status()
@@ -79,95 +107,60 @@ def call_live_agent(example: dict) -> dict:
                 except json.JSONDecodeError:
                     tool_args_actual = {}
 
-        return {
-            "output": output,
-            "tool_called": tool_called,
-            "tool_args_actual": tool_args_actual,
-        }
+        return {"output": output, "tool_called": tool_called, "tool_args": tool_args_actual}
     except Exception as exc:
-        return {"output": f"ERROR: {exc}", "tool_called": "", "tool_args_actual": {}}
+        return {"output": f"ERROR: {exc}", "tool_called": "", "tool_args": {}}
 
 
-# ── Evaluator 1: tool selection (code-based) ─────────────────────────────────
+# ── Code-based evaluators ─────────────────────────────────────────────────────
 
-def eval_tool_selection(output: dict, example: dict) -> dict:
-    actual = (output or {}).get("tool_called", "")
-    expected = (example.get("metadata") or {}).get("expected_tool", "")
-    correct = actual == expected
+def eval_tool_selection(actual: dict, metadata: dict) -> dict:
+    got = actual.get("tool_called", "")
+    expected = metadata.get("expected_tool", "")
+    correct = got == expected
     return {
         "score": 1.0 if correct else 0.0,
         "label": "correct" if correct else "wrong",
-        "explanation": f"expected={expected!r}  got={actual!r}",
+        "explanation": f"expected={expected!r} got={got!r}",
     }
 
 
-# ── Evaluator 2: tool argument match (code-based) ────────────────────────────
-
-def eval_tool_args_match(output: dict, example: dict) -> dict:
-    """
-    Compare the actual tool call arguments against the engineer-defined contract.
-    For tools with no arguments (list_products, get_supported_currencies) this
-    passes trivially.  For get_ads it asserts category='binoculars', etc.
-    """
-    actual_args = (output or {}).get("tool_args_actual", {})
-    expected_args_str = (example.get("metadata") or {}).get("expected_tool_args", "{}")
+def eval_tool_args_match(actual: dict, metadata: dict) -> dict:
+    actual_args = actual.get("tool_args", {})
     try:
-        expected_args = json.loads(expected_args_str)
+        expected_args = json.loads(metadata.get("expected_tool_args", "{}"))
     except (json.JSONDecodeError, TypeError):
         expected_args = {}
 
     if not expected_args:
-        # Tool takes no arguments — trivially correct
         return {"score": 1.0, "label": "correct", "explanation": "tool takes no arguments"}
 
-    # Check every expected key matches
-    mismatches = []
-    for key, expected_val in expected_args.items():
-        actual_val = actual_args.get(key)
-        if actual_val != expected_val:
-            mismatches.append(f"{key}: expected={expected_val!r} got={actual_val!r}")
-
-    if mismatches:
-        return {
-            "score": 0.0,
-            "label": "wrong",
-            "explanation": "; ".join(mismatches),
-        }
+    mismatches = [
+        f"{k}: expected={v!r} got={actual_args.get(k)!r}"
+        for k, v in expected_args.items()
+        if actual_args.get(k) != v
+    ]
     return {
-        "score": 1.0,
-        "label": "correct",
-        "explanation": f"args match: {json.dumps(actual_args)}",
+        "score": 0.0 if mismatches else 1.0,
+        "label": "wrong" if mismatches else "correct",
+        "explanation": "; ".join(mismatches) if mismatches else f"args match: {json.dumps(actual_args)}",
     }
 
 
-# ── Evaluator 3: response facts (code-based) ─────────────────────────────────
-
-def eval_response_facts(output: dict, example: dict) -> dict:
-    """
-    Assert that all engineer-defined expected facts appear in the response.
-    Facts are derived from the actual tool output (product names, promo text,
-    currency codes, product IDs) — so this validates end-to-end correctness
-    without requiring an LLM judge.
-
-    Example for binoculars prompt:
-      expected_facts = ["Roof Binoculars for sale. 50% off.", "2ZYFJ3GM2N"]
-      → both must appear somewhere in the agent response
-    """
-    response = (output or {}).get("output", "")
-    facts_str = (example.get("metadata") or {}).get("expected_facts", "[]")
+def eval_response_facts(actual: dict, metadata: dict) -> dict:
+    response = actual.get("output", "")
     try:
-        expected_facts: list[str] = json.loads(facts_str)
+        expected_facts: list[str] = json.loads(metadata.get("expected_facts", "[]"))
     except (json.JSONDecodeError, TypeError):
         expected_facts = []
 
     if not expected_facts or not response or response.startswith("ERROR:"):
-        return {"score": 0.0, "label": "missing", "explanation": "no response or no facts to check"}
+        return {"score": 0.0, "label": "fail", "explanation": "no response or no facts"}
 
     missing = [f for f in expected_facts if f.lower() not in response.lower()]
-    score = 1.0 - (len(missing) / len(expected_facts))
-
+    score = round(1.0 - len(missing) / len(expected_facts), 2)
     return {
-        "score": round(score, 2),
+        "score": score,
         "label": "pass" if not missing else "fail",
         "explanation": (
             f"all {len(expected_facts)} facts present"
@@ -177,122 +170,111 @@ def eval_response_facts(output: dict, example: dict) -> dict:
     }
 
 
-# ── Evaluator 4: faithfulness (LLM-as-judge) ─────────────────────────────────
+# ── LLM-as-judge evaluators ───────────────────────────────────────────────────
 
-FAITHFULNESS_TEMPLATE = """
-You are evaluating whether an AI assistant's response is faithful to the data it retrieved.
+def llm_judge(client: OpenAI, prompt: str, rails: list[str]) -> str:
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=10,
+        temperature=0,
+    )
+    answer = resp.choices[0].message.content.strip().lower()
+    return answer if answer in rails else rails[-1]
 
-Retrieved data (ground truth from the system):
-[tool_output]
+
+def eval_faithfulness(actual: dict, metadata: dict, client: OpenAI) -> dict:
+    tool_output = metadata.get("tool_output", "")
+    response = actual.get("output", "")
+    if not response or not tool_output or response.startswith("ERROR:"):
+        return {"score": 0.0, "label": "hallucinated"}
+
+    prompt = f"""Is every factual claim in the assistant response supported by the retrieved data?
+
+Retrieved data:
 {tool_output}
-[end tool_output]
 
 Assistant response:
-[response]
 {response}
-[end response]
 
-Is every factual claim in the response supported by the retrieved data?
-Answer with exactly one word: "faithful" or "hallucinated".
-""".strip()
+Answer with exactly one word: "faithful" or "hallucinated"."""
 
-def eval_faithfulness(output: dict, example: dict) -> dict:
-    tool_output = (example.get("metadata") or {}).get("tool_output", "")
-    response = (output or {}).get("output", "")
-    if not response or not tool_output or response.startswith("ERROR:"):
-        return {"score": 0.0, "label": "hallucinated", "explanation": "no valid response"}
-
-    model = OpenAIModel(model="gpt-4o-mini")
-    df = pd.DataFrame([{"tool_output": tool_output, "response": response}])
-    result = llm_classify(
-        dataframe=df,
-        template=FAITHFULNESS_TEMPLATE,
-        model=model,
-        rails=["faithful", "hallucinated"],
-    )
-    label = result["label"].iloc[0]
+    label = llm_judge(client, prompt, ["faithful", "hallucinated"])
     return {"score": 1.0 if label == "faithful" else 0.0, "label": label}
 
 
-# ── Evaluator 5: completeness (LLM-as-judge) ─────────────────────────────────
+def eval_completeness(actual: dict, metadata: dict, client: OpenAI) -> dict:
+    tool_output = metadata.get("tool_output", "")
+    response = actual.get("output", "")
+    if not response or not tool_output or response.startswith("ERROR:"):
+        return {"score": 0.0, "label": "incomplete"}
 
-COMPLETENESS_TEMPLATE = """
-You are evaluating whether an AI assistant's response covered all key information.
+    prompt = f"""Did the assistant response cover all key items from the system data without omitting important entries?
 
-Data returned by the system:
-[tool_output]
+System data:
 {tool_output}
-[end tool_output]
 
 Assistant response:
-[response]
 {response}
-[end response]
 
-Did the assistant include all key items or data points from the system data
-without omitting important entries?
-Answer with exactly one word: "complete" or "incomplete".
-""".strip()
+Answer with exactly one word: "complete" or "incomplete"."""
 
-def eval_completeness(output: dict, example: dict) -> dict:
-    tool_output = (example.get("metadata") or {}).get("tool_output", "")
-    response = (output or {}).get("output", "")
-    if not response or not tool_output or response.startswith("ERROR:"):
-        return {"score": 0.0, "label": "incomplete", "explanation": "no valid response"}
-
-    model = OpenAIModel(model="gpt-4o-mini")
-    df = pd.DataFrame([{"tool_output": tool_output, "response": response}])
-    result = llm_classify(
-        dataframe=df,
-        template=COMPLETENESS_TEMPLATE,
-        model=model,
-        rails=["complete", "incomplete"],
-    )
-    label = result["label"].iloc[0]
+    label = llm_judge(client, prompt, ["complete", "incomplete"])
     return {"score": 1.0 if label == "complete" else 0.0, "label": label}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    api_key = os.environ.get("ARIZE_API_KEY")  # optional for self-hosted Phoenix
     openai_key = os.environ.get("OPENAI_API_KEY")
     if not openai_key:
-        print("ERROR: OPENAI_API_KEY not set (required for faithfulness and completeness evaluators)")
+        print("ERROR: OPENAI_API_KEY not set")
         sys.exit(1)
 
-    print(f"Agent endpoint : {AGENT_ENDPOINT}")
-    print(f"Arize endpoint : {ARIZE_ENDPOINT}")
+    print(f"Phoenix  : {PHOENIX_ENDPOINT}")
+    print(f"Agent    : {AGENT_ENDPOINT}")
 
-    client = px.Client(endpoint=ARIZE_ENDPOINT, **( {"api_key": api_key} if api_key else {}))
+    try:
+        requests.get(f"{PHOENIX_ENDPOINT}/healthz", timeout=5)
+    except Exception:
+        print("ERROR: Cannot reach Phoenix. Run: bash arize/port-forward.sh")
+        sys.exit(1)
 
-    dataset = client.get_dataset(name=DATASET_NAME)
-    print(f"Loaded dataset '{dataset.name}' ({len(dataset)} examples)\n")
+    openai_client = OpenAI(api_key=openai_key)
 
-    print("Running experiment with 5 evaluators:")
-    print("  [code] tool_selection   — right tool called?")
-    print("  [code] tool_args_match  — correct JSON arguments?")
-    print("  [code] response_facts   — all expected facts in response?")
-    print("  [LLM]  faithfulness     — any hallucinations?")
-    print("  [LLM]  completeness     — anything omitted?\n")
+    dataset = get_dataset(DATASET_NAME)
+    examples = get_examples(dataset["id"])
+    print(f"\nLoaded dataset '{DATASET_NAME}' ({len(examples)} examples)")
 
-    experiment = run_experiment(
-        dataset=dataset,
-        task=call_live_agent,
-        evaluators=[
-            eval_tool_selection,
-            eval_tool_args_match,
-            eval_response_facts,
-            eval_faithfulness,
-            eval_completeness,
-        ],
-        experiment_name=EXPERIMENT_NAME,
-        project_name="astronomy-shop-agent",
-        client=client,
-    )
+    experiment_name = f"eval-{int(time.time())}"
+    experiment_id = create_experiment(dataset["id"], experiment_name)
+    print(f"Created experiment '{experiment_name}' (id={experiment_id})\n")
 
-    print(f"\nExperiment '{experiment.name}' complete.")
-    print(f"Results: {ARIZE_ENDPOINT}/projects/astronomy-shop-agent/experiments")
+    for ex in examples:
+        user_input = ex.get("input", {}).get("message", "")
+        metadata = ex.get("metadata", {})
+        print(f"  Running: {user_input[:60]}")
+
+        actual = call_live_agent(user_input)
+        print(f"    tool_called={actual['tool_called']!r}  output={actual['output'][:50]!r}...")
+
+        evals = {
+            "tool_selection": eval_tool_selection(actual, metadata),
+            "tool_args_match": eval_tool_args_match(actual, metadata),
+            "response_facts":  eval_response_facts(actual, metadata),
+            "faithfulness":    eval_faithfulness(actual, metadata, openai_client),
+            "completeness":    eval_completeness(actual, metadata, openai_client),
+        }
+
+        for name, result in evals.items():
+            icon = "✓" if result["score"] == 1.0 else "✗"
+            print(f"    {icon} {name}: {result['label']} ({result['score']})")
+
+        post_run(experiment_id, ex["id"], actual, evals)
+        print()
+
+    print(f"Experiment complete.")
+    print(f"View: {PHOENIX_ENDPOINT}/experiments/{experiment_id}")
 
 
 if __name__ == "__main__":
