@@ -46,6 +46,27 @@ def extract_expected_facts(tool_name: str, tool_output_str: str) -> list[str]:
     return facts
 
 
+def _parse_json_body(raw) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    try:
+        result = json.loads(raw)
+        return result if isinstance(result, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _parse_response_string(interaction: dict) -> dict:
+    try:
+        body = interaction.get("response", {}).get("body", {})
+        raw = body.get("string", "") if isinstance(body, dict) else ""
+        return _parse_json_body(raw)
+    except (AttributeError, TypeError):
+        return {}
+
+
 def parse_cassette(path: Path) -> list[dict]:
     with open(path) as f:
         cassette = yaml.safe_load(f)
@@ -55,51 +76,76 @@ def parse_cassette(path: Path) -> list[dict]:
     i = 0
 
     while i < len(interactions):
-        req_body = json.loads(interactions[i]["request"]["body"])
-        messages = req_body["messages"]
+        try:
+            req_body = _parse_json_body(interactions[i].get("request", {}).get("body", ""))
+            messages = req_body.get("messages", [])
 
-        non_system = [m for m in messages if m["role"] != "system"]
-        if len(non_system) != 1 or non_system[0]["role"] != "user":
+            non_system = [m for m in messages if isinstance(m, dict) and m.get("role") != "system"]
+            if len(non_system) != 1 or non_system[0].get("role") != "user":
+                i += 1
+                continue
+
+            user_input = non_system[0].get("content", "")
+            resp_body = _parse_response_string(interactions[i])
+            choices = resp_body.get("choices", [])
+            if not choices or not isinstance(choices, list):
+                i += 1
+                continue
+
+            llm_choice = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+            if not llm_choice.get("tool_calls"):
+                i += 1
+                continue
+
+            tool_calls = llm_choice["tool_calls"]
+            if not tool_calls or not isinstance(tool_calls, list):
+                i += 1
+                continue
+
+            fn = tool_calls[0].get("function", {}) if isinstance(tool_calls[0], dict) else {}
+            tool_name = fn.get("name", "")
+            raw_args = fn.get("arguments", "{}")
+            try:
+                tool_args = json.loads(raw_args) if raw_args not in ("{}", "", None) else {}
+            except (json.JSONDecodeError, TypeError):
+                tool_args = {}
+
+            if i + 1 >= len(interactions):
+                i += 1
+                continue
+
+            next_req = _parse_json_body(interactions[i + 1].get("request", {}).get("body", ""))
+            tool_output = next(
+                (m.get("content", "") for m in next_req.get("messages", [])
+                 if isinstance(m, dict) and m.get("role") == "tool"),
+                "",
+            )
+
+            final_resp = _parse_response_string(interactions[i + 1])
+            final_choices = final_resp.get("choices", [])
+            if not final_choices or not isinstance(final_choices, list):
+                i += 2
+                continue
+
+            final_msg = final_choices[0].get("message", {}) if isinstance(final_choices[0], dict) else {}
+            final_answer = final_msg.get("content", "")
+
+            if final_answer and tool_name and user_input:
+                examples.append({
+                    "input": user_input,
+                    "output": final_answer,
+                    "expected_tool": tool_name,
+                    "expected_tool_args": json.dumps(tool_args),
+                    "tool_output": tool_output,
+                    "expected_facts": json.dumps(extract_expected_facts(tool_name, tool_output)),
+                    "source_model": req_body.get("model", "unknown"),
+                })
+
+            i += 2
+
+        except (KeyError, IndexError, TypeError, AttributeError) as exc:
+            print(f"  [warn] skipping interaction {i} in {path.name}: {exc}")
             i += 1
-            continue
-
-        user_input = non_system[0]["content"]
-        resp_body = json.loads(interactions[i]["response"]["body"]["string"])
-        llm_choice = resp_body["choices"][0]["message"]
-
-        if not llm_choice.get("tool_calls"):
-            i += 1
-            continue
-
-        tool_call = llm_choice["tool_calls"][0]["function"]
-        tool_name = tool_call["name"]
-        raw_args = tool_call.get("arguments", "{}")
-        tool_args = json.loads(raw_args) if raw_args not in ("{}", "") else {}
-
-        if i + 1 >= len(interactions):
-            i += 1
-            continue
-
-        next_req = json.loads(interactions[i + 1]["request"]["body"])
-        tool_output = next(
-            (m["content"] for m in next_req.get("messages", []) if m["role"] == "tool"), ""
-        )
-
-        final_resp = json.loads(interactions[i + 1]["response"]["body"]["string"])
-        final_answer = final_resp["choices"][0]["message"].get("content", "")
-
-        if final_answer:
-            examples.append({
-                "input": user_input,
-                "output": final_answer,
-                "expected_tool": tool_name,
-                "expected_tool_args": json.dumps(tool_args),
-                "tool_output": tool_output,
-                "expected_facts": json.dumps(extract_expected_facts(tool_name, tool_output)),
-                "source_model": req_body.get("model", "unknown"),
-            })
-
-        i += 2
 
     return examples
 
