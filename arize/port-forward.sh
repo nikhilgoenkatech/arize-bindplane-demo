@@ -36,12 +36,5 @@ echo "  Agent    → http://localhost:8010  (PID $(cat $AGENT_PF_PID_FILE))"
 # Give kubectl a moment to establish connections
 sleep 2
 
-# Export env vars when sourced
-if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    export ARIZE_ENDPOINT=http://localhost:6006
-    export AGENT_ENDPOINT=http://localhost:8010
-    echo "Env vars set: ARIZE_ENDPOINT, AGENT_ENDPOINT"
-fi
-
 echo "Done. Logs: /tmp/pf-phoenix.log  /tmp/pf-agent.log"
 echo "Stop with: bash arize/port-forward.sh stop"
