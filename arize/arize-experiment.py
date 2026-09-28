@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 
 import requests
 from openai import OpenAI
@@ -46,33 +47,55 @@ def get_dataset(name: str) -> dict:
 def get_examples(dataset_id: str) -> list[dict]:
     resp = requests.get(f"{PHOENIX_ENDPOINT}/v1/datasets/{dataset_id}/examples", timeout=10)
     resp.raise_for_status()
-    return resp.json().get("data", [])
+    return resp.json().get("data", {}).get("examples", [])
 
 
 def create_experiment(dataset_id: str, name: str) -> str:
     resp = requests.post(
-        f"{PHOENIX_ENDPOINT}/v1/experiments",
-        json={"dataset_id": dataset_id, "name": name},
+        f"{PHOENIX_ENDPOINT}/v1/datasets/{dataset_id}/experiments",
+        json={"name": name},
         timeout=10,
     )
     resp.raise_for_status()
     return resp.json()["data"]["id"]
 
 
-def post_run(experiment_id: str, example_id: str, output: dict, evals: dict) -> None:
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def create_run(experiment_id: str, example_id: str, output: dict, start_time: str, end_time: str) -> str:
     payload = {
-        "example_id": example_id,
+        "dataset_example_id": example_id,
         "output": output,
-        "annotations": [
-            {"name": k, "score": v["score"], "label": v["label"], "explanation": v.get("explanation", "")}
-            for k, v in evals.items()
-        ],
+        "repetition_number": 1,
+        "start_time": start_time,
+        "end_time": end_time,
     }
     resp = requests.post(
         f"{PHOENIX_ENDPOINT}/v1/experiments/{experiment_id}/runs",
         json=payload,
         timeout=10,
     )
+    resp.raise_for_status()
+    return resp.json()["data"]["id"]
+
+
+def post_evaluation(run_id: str, name: str, annotator_kind: str, result: dict) -> None:
+    timestamp = _now()
+    payload = {
+        "experiment_run_id": run_id,
+        "name": name,
+        "annotator_kind": annotator_kind,
+        "start_time": timestamp,
+        "end_time": timestamp,
+        "result": {
+            "label": result.get("label"),
+            "score": result.get("score"),
+            "explanation": result.get("explanation", ""),
+        },
+    }
+    resp = requests.post(f"{PHOENIX_ENDPOINT}/v1/experiment_evaluations", json=payload, timeout=10)
     resp.raise_for_status()
 
 
@@ -255,22 +278,26 @@ def main():
         metadata = ex.get("metadata", {})
         print(f"  Running: {user_input[:60]}")
 
+        run_start = _now()
         actual = call_live_agent(user_input)
+        run_end = _now()
         print(f"    tool_called={actual['tool_called']!r}  output={actual['output'][:50]!r}...")
 
+        run_id = create_run(experiment_id, ex["id"], actual, run_start, run_end)
+
         evals = {
-            "tool_selection": eval_tool_selection(actual, metadata),
-            "tool_args_match": eval_tool_args_match(actual, metadata),
-            "response_facts":  eval_response_facts(actual, metadata),
-            "faithfulness":    eval_faithfulness(actual, metadata, openai_client),
-            "completeness":    eval_completeness(actual, metadata, openai_client),
+            "tool_selection": ("CODE", eval_tool_selection(actual, metadata)),
+            "tool_args_match": ("CODE", eval_tool_args_match(actual, metadata)),
+            "response_facts":  ("CODE", eval_response_facts(actual, metadata)),
+            "faithfulness":    ("LLM", eval_faithfulness(actual, metadata, openai_client)),
+            "completeness":    ("LLM", eval_completeness(actual, metadata, openai_client)),
         }
 
-        for name, result in evals.items():
+        for name, (annotator_kind, result) in evals.items():
             icon = "✓" if result["score"] == 1.0 else "✗"
             print(f"    {icon} {name}: {result['label']} ({result['score']})")
+            post_evaluation(run_id, name, annotator_kind, result)
 
-        post_run(experiment_id, ex["id"], actual, evals)
         print()
 
     print(f"Experiment complete.")

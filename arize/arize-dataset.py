@@ -166,49 +166,33 @@ def parse_cassette(path: Path) -> list[dict]:
     return examples
 
 
-def create_or_get_dataset(name: str) -> str:
+def dataset_exists(name: str) -> bool:
     resp = requests.get(f"{PHOENIX_ENDPOINT}/v1/datasets", timeout=10)
     resp.raise_for_status()
-    for ds in resp.json().get("data", []):
-        if ds["name"] == name:
-            print(f"Dataset '{name}' already exists (id={ds['id']}), will append examples.")
-            return ds["id"]
-
-    resp = requests.post(
-        f"{PHOENIX_ENDPOINT}/v1/datasets",
-        json={"name": name, "description": "Golden examples from VCR cassettes — engineer-defined contracts"},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    dataset_id = resp.json()["data"]["id"]
-    print(f"Created dataset '{name}' (id={dataset_id})")
-    return dataset_id
+    return any(ds.get("name") == name for ds in resp.json().get("data", []))
 
 
-def upload_examples(dataset_id: str, examples: list[dict]) -> None:
+def upload_examples(name: str, examples: list[dict], action: str) -> dict:
     payload = {
-        "examples": [
+        "action": action,
+        "name": name,
+        "description": "Golden examples from VCR cassettes — engineer-defined contracts",
+        "inputs": [{"message": ex["input"]} for ex in examples],
+        "outputs": [{"response": ex["output"]} for ex in examples],
+        "metadata": [
             {
-                "input": {"message": ex["input"]},
-                "output": {"response": ex["output"]},
-                "metadata": {
-                    "expected_tool": ex["expected_tool"],
-                    "expected_tool_args": ex["expected_tool_args"],
-                    "tool_output": ex["tool_output"],
-                    "expected_facts": ex["expected_facts"],
-                    "source_model": ex["source_model"],
-                },
+                "expected_tool": ex["expected_tool"],
+                "expected_tool_args": ex["expected_tool_args"],
+                "tool_output": ex["tool_output"],
+                "expected_facts": ex["expected_facts"],
+                "source_model": ex["source_model"],
             }
             for ex in examples
-        ]
+        ],
     }
-    resp = requests.post(
-        f"{PHOENIX_ENDPOINT}/v1/datasets/{dataset_id}/examples",
-        json=payload,
-        timeout=30,
-    )
+    resp = requests.post(f"{PHOENIX_ENDPOINT}/v1/datasets/upload", json=payload, timeout=30)
     resp.raise_for_status()
-    print(f"Uploaded {len(examples)} examples.")
+    return resp.json()["data"]
 
 
 def main():
@@ -238,8 +222,12 @@ def main():
         print(f"  [{ex['expected_tool']}({ex['expected_tool_args']})] {ex['input'][:50]}")
         print(f"    facts: {facts[:2]}{'...' if len(facts) > 2 else ''}")
 
-    dataset_id = create_or_get_dataset(DATASET_NAME)
-    upload_examples(dataset_id, unique)
+    action = "append" if dataset_exists(DATASET_NAME) else "create"
+    result = upload_examples(DATASET_NAME, unique, action)
+    print(
+        f"\nDataset '{DATASET_NAME}' (id={result['dataset_id']}, version={result['version_id']}): "
+        f"{result['num_created_examples']} created, {result['num_updated_examples']} updated"
+    )
 
     print(f"\nDone. View at: {PHOENIX_ENDPOINT}/datasets")
 
