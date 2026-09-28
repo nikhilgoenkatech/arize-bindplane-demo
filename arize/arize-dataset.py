@@ -30,7 +30,9 @@ import phoenix as px
 
 CASSETTE_DIR = Path(__file__).parent.parent / "src/agent/fixtures/vcr_cassettes"
 DATASET_NAME = "astronomy-shop-golden"
-ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "https://app.arize.com")
+# Self-hosted Phoenix (already running in cluster): port-forward svc/phoenix 6006:6006 -n phoenix
+# Arize cloud: set to https://app.arize.com and also set ARIZE_API_KEY
+ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
 
 
 def extract_expected_facts(tool_name: str, tool_output_str: str) -> list[str]:
@@ -132,12 +134,8 @@ def parse_cassette(path: Path) -> list[dict]:
 
 
 def main():
-    api_key = os.environ.get("ARIZE_API_KEY")
-    if not api_key:
-        print("ERROR: ARIZE_API_KEY not set")
-        sys.exit(1)
-
-    client = px.Client(endpoint=ARIZE_ENDPOINT, api_key=api_key)
+    api_key = os.environ.get("ARIZE_API_KEY")  # optional for self-hosted Phoenix
+    client = px.Client(endpoint=ARIZE_ENDPOINT, **( {"api_key": api_key} if api_key else {}))
 
     all_examples: list[dict] = []
     for cassette_file in sorted(CASSETTE_DIR.glob("*.yaml")):

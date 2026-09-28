@@ -40,7 +40,9 @@ from phoenix.experiments import run_experiment
 
 DATASET_NAME = "astronomy-shop-golden"
 EXPERIMENT_NAME = "astronomy-shop-agent-eval"
-ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "https://app.arize.com")
+# Self-hosted Phoenix (already running in cluster): port-forward svc/phoenix 6006:6006 -n phoenix
+# Arize cloud: set to https://app.arize.com and also set ARIZE_API_KEY
+ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
 AGENT_ENDPOINT = os.getenv("AGENT_ENDPOINT", "http://localhost:8010")
 
 
@@ -253,11 +255,8 @@ def eval_completeness(output: dict, example: dict) -> dict:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    api_key = os.environ.get("ARIZE_API_KEY")
+    api_key = os.environ.get("ARIZE_API_KEY")  # optional for self-hosted Phoenix
     openai_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        print("ERROR: ARIZE_API_KEY not set")
-        sys.exit(1)
     if not openai_key:
         print("ERROR: OPENAI_API_KEY not set (required for faithfulness and completeness evaluators)")
         sys.exit(1)
@@ -265,7 +264,7 @@ def main():
     print(f"Agent endpoint : {AGENT_ENDPOINT}")
     print(f"Arize endpoint : {ARIZE_ENDPOINT}")
 
-    client = px.Client(endpoint=ARIZE_ENDPOINT, api_key=api_key)
+    client = px.Client(endpoint=ARIZE_ENDPOINT, **( {"api_key": api_key} if api_key else {}))
 
     dataset = client.get_dataset(name=DATASET_NAME)
     print(f"Loaded dataset '{dataset.name}' ({len(dataset)} examples)\n")
