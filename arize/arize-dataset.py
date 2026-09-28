@@ -82,7 +82,7 @@ def parse_cassette(path: Path) -> list[dict]:
 
         next_req = json.loads(interactions[i + 1]["request"]["body"])
         tool_output = next(
-            (m["content"] for m in next_req["messages"] if m["role"] == "tool"), ""
+            (m["content"] for m in next_req.get("messages", []) if m["role"] == "tool"), ""
         )
 
         final_resp = json.loads(interactions[i + 1]["response"]["body"]["string"])
