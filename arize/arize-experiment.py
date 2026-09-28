@@ -13,10 +13,17 @@
 #   faithfulness    [LLM]   Any hallucinated claims?
 #   completeness    [LLM]   Any important items omitted?
 #
+# After scoring every example, posts one aggregate business event to Dynatrace
+# so a Site Reliability Guardian can qualify the release using this signal
+# alongside the release's live operational telemetry. This script never makes
+# the qualify/reject call itself — Dynatrace is the sole release authority.
+#
 # Usage:
 #   pip install requests openai pyyaml
 #   bash arize/port-forward.sh
 #   export OPENAI_API_KEY=<your-key>
+#   export DT_ENV_URL=https://<env-id>.live.dynatrace.com   # optional, skips bizevent if unset
+#   export DT_API_TOKEN=<token with bizevents.ingest scope>  # optional
 #   python3 arize/arize-experiment.py
 
 import json
@@ -31,6 +38,15 @@ from openai import OpenAI
 DATASET_NAME = "astronomy-shop-golden"
 PHOENIX_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "http://localhost:6006")
 AGENT_ENDPOINT = os.getenv("AGENT_ENDPOINT", "http://localhost:8010")
+
+# Dynatrace is the release-qualification authority: this script only reports the
+# eval outcome as a business event, it never blocks or approves anything itself.
+DT_ENV_URL = os.getenv("DT_ENV_URL")  # e.g. https://abc12345.live.dynatrace.com
+DT_API_TOKEN = os.getenv("DT_API_TOKEN")
+DT_AUTH_SCHEME = os.getenv("DT_AUTH_SCHEME", "Api-Token")  # "Api-Token" (classic) or "Bearer" (platform)
+AGENT_SERVICE_NAME = os.getenv("AGENT_SERVICE_NAME", "agent")
+RELEASE_VERSION = os.getenv("RELEASE_VERSION", "unknown")
+EVAL_PASS_THRESHOLD = float(os.getenv("EVAL_PASS_THRESHOLD", "0.7"))
 
 
 # ── Phoenix REST helpers ──────────────────────────────────────────────────────
@@ -253,6 +269,68 @@ Answer with exactly one word: "complete" or "incomplete"."""
     return {"score": 1.0 if label == "complete" else 0.0, "label": label}
 
 
+# ── Dynatrace business event ──────────────────────────────────────────────────
+#
+# Reports the aggregate eval outcome as one bizevent per experiment run. This
+# script makes no qualification decision — a Site Reliability Guardian in
+# Dynatrace is the single authority that combines this signal with the live
+# operational telemetry from the same release to qualify or reject it.
+
+def build_bizevent(experiment_id: str, experiment_name: str, dataset_id: str,
+                    scores_by_evaluator: dict, start_time: str, end_time: str) -> dict:
+    event = {
+        "event.type": "ai_agent.eval.experiment_completed",
+        "event.provider": "phoenix",
+        "unique_id": experiment_id,
+        "timeframe.from": start_time,
+        "timeframe.to": end_time,
+        "agent.service_name": AGENT_SERVICE_NAME,
+        "release.version": RELEASE_VERSION,
+        "dataset.name": DATASET_NAME,
+        "dataset.id": dataset_id,
+        "experiment.id": experiment_id,
+        "experiment.name": experiment_name,
+        "experiment.url": f"{PHOENIX_ENDPOINT}/experiments/{experiment_id}",
+    }
+
+    overall_scores = []
+    all_passed = True
+    for name, scores in scores_by_evaluator.items():
+        avg_score = round(sum(scores) / len(scores), 4) if scores else 0.0
+        pass_count = sum(1 for s in scores if s >= EVAL_PASS_THRESHOLD)
+        passed = pass_count == len(scores) and len(scores) > 0
+        all_passed = all_passed and passed
+
+        event[f"eval.{name}.avg_score"] = avg_score
+        event[f"eval.{name}.pass_count"] = pass_count
+        event[f"eval.{name}.total_count"] = len(scores)
+        event[f"eval.{name}.passed"] = passed
+        overall_scores.append(avg_score)
+
+    event["eval.overall.avg_score"] = round(sum(overall_scores) / len(overall_scores), 4) if overall_scores else 0.0
+    event["eval.overall.passed"] = all_passed
+    event["eval.overall.threshold"] = EVAL_PASS_THRESHOLD
+    return event
+
+
+def send_bizevent(event: dict) -> None:
+    if not DT_ENV_URL or not DT_API_TOKEN:
+        print("\n[skip] DT_ENV_URL / DT_API_TOKEN not set — skipping Dynatrace bizevent.")
+        return
+
+    resp = requests.post(
+        f"{DT_ENV_URL.rstrip('/')}/api/v2/bizevents/ingest",
+        json=event,
+        headers={
+            "Authorization": f"{DT_AUTH_SCHEME} {DT_API_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    print(f"\nSent bizevent to Dynatrace: eval.overall.passed={event['eval.overall.passed']}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -280,6 +358,12 @@ def main():
     experiment_id = create_experiment(dataset["id"], experiment_name)
     print(f"Created experiment '{experiment_name}' (id={experiment_id})\n")
 
+    experiment_start = _now()
+    scores_by_evaluator: dict[str, list[float]] = {
+        "tool_selection": [], "tool_args_match": [], "response_facts": [],
+        "faithfulness": [], "completeness": [],
+    }
+
     for ex in examples:
         user_input = ex.get("input", {}).get("message", "")
         metadata = ex.get("metadata", {})
@@ -304,11 +388,20 @@ def main():
             icon = "✓" if result["score"] == 1.0 else "✗"
             print(f"    {icon} {name}: {result['label']} ({result['score']})")
             post_evaluation(run_id, name, annotator_kind, result)
+            scores_by_evaluator[name].append(result["score"])
 
         print()
 
+    experiment_end = _now()
+
     print(f"Experiment complete.")
     print(f"View: {PHOENIX_ENDPOINT}/experiments/{experiment_id}")
+
+    bizevent = build_bizevent(
+        experiment_id, experiment_name, dataset["id"],
+        scores_by_evaluator, experiment_start, experiment_end,
+    )
+    send_bizevent(bizevent)
 
 
 if __name__ == "__main__":
