@@ -119,16 +119,23 @@ def call_live_agent(message: str) -> dict:
         for msg in messages:
             if not isinstance(msg, dict):
                 continue
-            if msg.get("role") == "assistant" and msg.get("content"):
+
+            msg_type = msg.get("type") or msg.get("role")
+            if msg_type in ("ai", "assistant") and msg.get("content"):
                 output = msg["content"]
-            if msg.get("tool_calls"):
-                fn = msg["tool_calls"][0]["function"]
-                tool_called = fn.get("name", "")
-                raw = fn.get("arguments", "{}")
-                try:
-                    tool_args_actual = json.loads(raw) if raw not in ("{}", "") else {}
-                except json.JSONDecodeError:
-                    tool_args_actual = {}
+
+            tool_calls = msg.get("tool_calls")
+            if tool_calls and isinstance(tool_calls, list) and isinstance(tool_calls[0], dict):
+                call = tool_calls[0]
+                tool_called = call.get("name", "")
+                raw_args = call.get("args", call.get("arguments", {}))
+                if isinstance(raw_args, dict):
+                    tool_args_actual = raw_args
+                else:
+                    try:
+                        tool_args_actual = json.loads(raw_args) if raw_args not in ("{}", "", None) else {}
+                    except (json.JSONDecodeError, TypeError):
+                        tool_args_actual = {}
 
         return {"output": output, "tool_called": tool_called, "tool_args": tool_args_actual}
     except Exception as exc:
