@@ -190,7 +190,12 @@ def upload_examples(name: str, examples: list[dict], action: str) -> dict:
             for ex in examples
         ],
     }
-    resp = requests.post(f"{PHOENIX_ENDPOINT}/v1/datasets/upload", json=payload, timeout=30)
+    resp = requests.post(
+        f"{PHOENIX_ENDPOINT}/v1/datasets/upload",
+        params={"sync": "true"},
+        json=payload,
+        timeout=30,
+    )
     resp.raise_for_status()
     return resp.json()["data"]
 
