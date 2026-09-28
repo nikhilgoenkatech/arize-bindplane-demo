@@ -10,6 +10,7 @@
 #   # port-forward first: bash arize/port-forward.sh
 #   python3 arize/arize-dataset.py
 
+import gzip
 import json
 import os
 import sys
@@ -46,15 +47,30 @@ def extract_expected_facts(tool_name: str, tool_output_str: str) -> list[str]:
     return facts
 
 
+def _decode_body_bytes(raw: bytes) -> str:
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return gzip.decompress(raw).decode("utf-8")
+    except (OSError, EOFError, UnicodeDecodeError):
+        return ""
+
+
 def _parse_json_body(raw) -> dict:
     if isinstance(raw, dict):
         return raw
     if not raw:
         return {}
+    if isinstance(raw, bytes):
+        raw = _decode_body_bytes(raw)
+        if not raw:
+            return {}
     try:
         result = json.loads(raw)
         return result if isinstance(result, dict) else {}
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
         return {}
 
 
@@ -63,7 +79,7 @@ def _parse_response_string(interaction: dict) -> dict:
         body = interaction.get("response", {}).get("body", {})
         raw = body.get("string", "") if isinstance(body, dict) else ""
         return _parse_json_body(raw)
-    except (AttributeError, TypeError):
+    except (AttributeError, TypeError, UnicodeDecodeError):
         return {}
 
 
@@ -143,7 +159,7 @@ def parse_cassette(path: Path) -> list[dict]:
 
             i += 2
 
-        except (KeyError, IndexError, TypeError, AttributeError) as exc:
+        except (KeyError, IndexError, TypeError, AttributeError, UnicodeDecodeError) as exc:
             print(f"  [warn] skipping interaction {i} in {path.name}: {exc}")
             i += 1
 
