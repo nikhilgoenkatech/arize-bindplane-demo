@@ -3,11 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Upload golden examples from VCR cassettes to Arize AX as a labeled dataset.
-# Each cassette interaction (user prompt → tool call → tool result → final answer)
-# becomes one row in the dataset, which serves as the ground truth for experiments.
+#
+# Each row captures the full engineer-defined contract for a user prompt:
+#   - expected_tool        : which tool should be called
+#   - expected_tool_args   : exact JSON arguments the tool should receive
+#   - tool_output          : what the tool actually returned (ground truth from API)
+#   - expected_facts       : key factual strings the response MUST contain
+#   - output               : the golden final answer from the cassette
+#
+# The experiment then validates live agent behaviour against this contract.
 #
 # Usage:
-#   pip install arize-phoenix pandas pyyaml
+#   pip install -r arize/requirements.txt
 #   export ARIZE_API_KEY=<from Arize AX → Settings → API Keys>
 #   export ARIZE_ENDPOINT=https://app.arize.com   # default
 #   python arize/arize-dataset.py
@@ -26,6 +33,43 @@ DATASET_NAME = "astronomy-shop-golden"
 ARIZE_ENDPOINT = os.getenv("ARIZE_ENDPOINT", "https://app.arize.com")
 
 
+def extract_expected_facts(tool_name: str, tool_output_str: str) -> list[str]:
+    """
+    Derive key factual strings the agent's response must contain.
+    These are extracted from the actual tool output — not invented.
+    """
+    try:
+        data = json.loads(tool_output_str)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    facts: list[str] = []
+
+    if tool_name == "list_products" and isinstance(data, list):
+        # Response must name every product returned by the API
+        for product in data:
+            if name := product.get("name"):
+                facts.append(name)
+
+    elif tool_name == "get_supported_currencies" and isinstance(data, list):
+        # Response must include the major currencies at minimum
+        major = {"USD", "EUR", "GBP", "JPY", "CAD", "AUD"}
+        facts = [c for c in data if c in major]
+
+    elif tool_name == "get_ads" and isinstance(data, list):
+        # Response must surface every promotion text and linked product ID
+        for ad in data:
+            if text := ad.get("text"):
+                facts.append(text)
+            if url := ad.get("redirectUrl"):
+                # extract product ID from /product/<id>
+                product_id = url.rstrip("/").split("/")[-1]
+                if product_id:
+                    facts.append(product_id)
+
+    return facts
+
+
 def parse_cassette(path: Path) -> list[dict]:
     with open(path) as f:
         cassette = yaml.safe_load(f)
@@ -38,7 +82,7 @@ def parse_cassette(path: Path) -> list[dict]:
         req_body = json.loads(interactions[i]["request"]["body"])
         messages = req_body["messages"]
 
-        # A new conversation begins with only [system, user] — no prior assistant/tool turns
+        # New conversation: only [system, user] — no prior assistant/tool turns
         non_system = [m for m in messages if m["role"] != "system"]
         if len(non_system) != 1 or non_system[0]["role"] != "user":
             i += 1
@@ -49,7 +93,6 @@ def parse_cassette(path: Path) -> list[dict]:
         resp_body = json.loads(interactions[i]["response"]["body"]["string"])
         llm_choice = resp_body["choices"][0]["message"]
 
-        # Expect a tool call as the first LLM action
         if not llm_choice.get("tool_calls"):
             i += 1
             continue
@@ -59,7 +102,6 @@ def parse_cassette(path: Path) -> list[dict]:
         raw_args = tool_call.get("arguments", "{}")
         tool_args = json.loads(raw_args) if raw_args not in ("{}", "") else {}
 
-        # Next interaction: tool result fed back → final LLM answer
         if i + 1 >= len(interactions):
             i += 1
             continue
@@ -73,13 +115,14 @@ def parse_cassette(path: Path) -> list[dict]:
         final_answer = final_resp["choices"][0]["message"].get("content", "")
 
         if final_answer:
+            expected_facts = extract_expected_facts(tool_name, tool_output)
             examples.append({
                 "input": user_input,
                 "output": final_answer,
-                "tool_called": tool_name,
-                "tool_args": json.dumps(tool_args),
-                "tool_output": tool_output,
                 "expected_tool": tool_name,
+                "expected_tool_args": json.dumps(tool_args),
+                "tool_output": tool_output,
+                "expected_facts": json.dumps(expected_facts),
                 "source_model": req_body.get("model", "unknown"),
             })
 
@@ -103,7 +146,7 @@ def main():
         print(f"  {len(examples)} examples found")
         all_examples.extend(examples)
 
-    # Keep first occurrence of each unique user prompt across cassettes
+    # Keep first occurrence of each unique user prompt
     seen: set[str] = set()
     unique = []
     for ex in all_examples:
@@ -112,8 +155,16 @@ def main():
             unique.append(ex)
 
     df = pd.DataFrame(unique)
-    print(f"\nDataset: {len(df)} unique golden examples")
-    print(df[["input", "tool_called"]].to_string(index=False))
+
+    print(f"\n{'='*60}")
+    print(f"Golden dataset: {len(df)} examples\n")
+    for _, row in df.iterrows():
+        print(f"  INPUT : {row['input']}")
+        print(f"  TOOL  : {row['expected_tool']}({row['expected_tool_args']})")
+        facts = json.loads(row["expected_facts"])
+        print(f"  FACTS : {facts[:3]}{'...' if len(facts) > 3 else ''}")
+        print()
+    print("="*60)
 
     print(f"\nUploading to Arize AX as '{DATASET_NAME}'...")
     dataset = client.upload_dataset(
@@ -121,7 +172,13 @@ def main():
         dataframe=df,
         input_keys=["input"],
         output_keys=["output"],
-        metadata_keys=["tool_called", "tool_args", "tool_output", "expected_tool", "source_model"],
+        metadata_keys=[
+            "expected_tool",
+            "expected_tool_args",
+            "tool_output",
+            "expected_facts",
+            "source_model",
+        ],
     )
     print(f"Done. Dataset '{dataset.name}' uploaded ({len(df)} rows).")
     print(f"View: {ARIZE_ENDPOINT}/projects/astronomy-shop-agent/datasets")
