@@ -277,7 +277,8 @@ Answer with exactly one word: "complete" or "incomplete"."""
 # operational telemetry from the same release to qualify or reject it.
 
 def build_bizevent(experiment_id: str, experiment_name: str, dataset_id: str,
-                    scores_by_evaluator: dict, start_time: str, end_time: str) -> dict:
+                    scores_by_evaluator: dict, latencies_ms: list[float],
+                    start_time: str, end_time: str) -> dict:
     event = {
         "event.type": "ai_agent.eval.experiment_completed",
         "event.provider": "phoenix",
@@ -291,7 +292,15 @@ def build_bizevent(experiment_id: str, experiment_name: str, dataset_id: str,
         "experiment.id": experiment_id,
         "experiment.name": experiment_name,
         "experiment.url": f"{PHOENIX_ENDPOINT}/experiments/{experiment_id}",
+        # TODO: once traces are correlated per-example (CI/CD workflow phase), add a
+        # per-failing-example Phoenix trace/span URL here so Dynatrace can deep-link
+        # straight from the qualification failure to the trace that explains it.
     }
+
+    if latencies_ms:
+        event["agent.avg_latency_ms"] = round(sum(latencies_ms) / len(latencies_ms), 1)
+        event["agent.max_latency_ms"] = round(max(latencies_ms), 1)
+        event["agent.run_count"] = len(latencies_ms)
 
     overall_scores = []
     all_passed = True
@@ -363,6 +372,7 @@ def main():
         "tool_selection": [], "tool_args_match": [], "response_facts": [],
         "faithfulness": [], "completeness": [],
     }
+    latencies_ms: list[float] = []
 
     for ex in examples:
         user_input = ex.get("input", {}).get("message", "")
@@ -370,7 +380,9 @@ def main():
         print(f"  Running: {user_input[:60]}")
 
         run_start = _now()
+        perf_start = time.perf_counter()
         actual = call_live_agent(user_input)
+        latencies_ms.append((time.perf_counter() - perf_start) * 1000)
         run_end = _now()
         print(f"    tool_called={actual['tool_called']!r}  output={actual['output'][:50]!r}...")
 
@@ -399,7 +411,7 @@ def main():
 
     bizevent = build_bizevent(
         experiment_id, experiment_name, dataset["id"],
-        scores_by_evaluator, experiment_start, experiment_end,
+        scores_by_evaluator, latencies_ms, experiment_start, experiment_end,
     )
     send_bizevent(bizevent)
 
