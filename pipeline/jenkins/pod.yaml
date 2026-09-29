@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: awscli
+      image: amazon/aws-cli:2.17.62
+      command: ["cat"]
+      tty: true
+    - name: helm
+      image: dtzar/helm-kubectl:3.16
+      command: ["cat"]
+      tty: true
+    - name: python
+      image: python:3.11-slim
+      command: ["cat"]
+      tty: true
