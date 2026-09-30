@@ -20,6 +20,14 @@
 //   GITCREDENTIALS (used for the repo checkout below)
 
 pipeline {
+    parameters {
+        booleanParam(
+            name: 'AI_EXTRA_TOOL_CALL',
+            defaultValue: false,
+            description: 'Force the agent to call an unnecessary extra tool (aiExtraToolCall demo flag) — turn on for the degraded-agent demo scenario, leave off for the normal one'
+        )
+    }
+
     // No Kubernetes cloud is configured on this Jenkins, so yamlFile is inert
     // here (confirmed: builds run directly on the "Jenkins" controller node,
     // not in a pod) — kept only to match the easytrade pipeline's agent
@@ -91,6 +99,30 @@ pipeline {
                         # NOTE: assumes the chart names this deployment exactly "agent" —
                         # verify with `kubectl get deployment -n ${K8S_NAMESPACE}` if this fails.
                         kubectl -n ${K8S_NAMESPACE} rollout status deployment/agent --timeout=300s
+
+                        # The published chart's flagd-config ConfigMap is generated purely from
+                        # a file bundled inside the chart package itself (no Helm values hook),
+                        # so it's reset to the chart's own defaults on every helm upgrade above —
+                        # this step has to reapply our copy (with this run's flag value patched
+                        # in) every single time, not just once.
+                        python3 -c "
+import json
+with open('src/flagd/demo.flagd.json') as f:
+    data = json.load(f)
+data['flags']['aiExtraToolCall']['defaultVariant'] = 'on' if '${AI_EXTRA_TOOL_CALL}' == 'true' else 'off'
+with open('/tmp/demo.flagd.json', 'w') as f:
+    json.dump(data, f, indent=2)
+"
+                        kubectl create configmap flagd-config \
+                          --from-file=demo.flagd.json=/tmp/demo.flagd.json \
+                          -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+
+                        # NOTE: assumes the chart names this deployment exactly "flagd" —
+                        # verify with `kubectl get deployment -n ${K8S_NAMESPACE}` if this fails.
+                        # A rollout restart is required: the pod's already-mounted ConfigMap
+                        # volume doesn't pick up new content without one.
+                        kubectl -n ${K8S_NAMESPACE} rollout restart deployment/flagd
+                        kubectl -n ${K8S_NAMESPACE} rollout status deployment/flagd --timeout=120s
                     '''
                 }
             }
