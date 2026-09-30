@@ -99,6 +99,10 @@ pipeline {
 
         stage('Validation (Agent Eval)') {
             steps {
+                // kubectl (via the kubeconfig aws eks update-kubeconfig writes) calls out to
+                // `aws eks get-token` on every invocation rather than embedding static
+                // credentials — so update-kubeconfig AND the kubectl port-forward calls
+                // inside port-forward.sh both need AWS creds present, hence one shared block.
                 withCredentials([
                     string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
@@ -108,12 +112,14 @@ pipeline {
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
                     '''
-                }
 
-                // JENKINS_NODE_COOKIE=dontKillMe stops Jenkins' process-tree killer from
-                // reaping the backgrounded kubectl port-forward processes once this step
-                // ends — without it they die before the next steps can reach Phoenix/agent.
-                sh 'JENKINS_NODE_COOKIE=dontKillMe bash arize/port-forward.sh'
+                    // JENKINS_NODE_COOKIE=dontKillMe stops Jenkins' process-tree killer from
+                    // reaping the backgrounded kubectl port-forward processes once this step
+                    // ends — without it they die before the next steps can reach Phoenix/agent.
+                    // The AWS creds only need to be present at launch — kubectl's exec-plugin
+                    // caches/refreshes tokens from the env this backgrounded process already has.
+                    sh 'JENKINS_NODE_COOKIE=dontKillMe bash arize/port-forward.sh'
+                }
 
                 script {
                     env.DT_API_TOKEN = getAccessToken()
