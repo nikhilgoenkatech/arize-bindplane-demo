@@ -117,7 +117,7 @@ pipeline {
                 }
 
                 sh '''
-                    python3 -m pip install --no-cache-dir -r arize/requirements.txt
+                    python3 -m pip install --no-cache-dir --break-system-packages -r arize/requirements.txt
                     python3 arize/arize-dataset.py
 
                     RELEASE_VERSION="${RELEASE_ID}" \
