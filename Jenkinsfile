@@ -110,7 +110,10 @@ pipeline {
                     '''
                 }
 
-                sh 'bash arize/port-forward.sh'
+                // JENKINS_NODE_COOKIE=dontKillMe stops Jenkins' process-tree killer from
+                // reaping the backgrounded kubectl port-forward processes once this step
+                // ends — without it they die before the next steps can reach Phoenix/agent.
+                sh 'JENKINS_NODE_COOKIE=dontKillMe bash arize/port-forward.sh'
 
                 script {
                     env.DT_API_TOKEN = getAccessToken()
