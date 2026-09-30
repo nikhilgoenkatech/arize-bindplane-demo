@@ -20,6 +20,10 @@
 //   GITCREDENTIALS (used for the repo checkout below)
 
 pipeline {
+    // No Kubernetes cloud is configured on this Jenkins, so yamlFile is inert
+    // here (confirmed: builds run directly on the "Jenkins" controller node,
+    // not in a pod) — kept only to match the easytrade pipeline's agent
+    // declaration exactly, same as there.
     agent {
         any {
             idleMinutes '0'
@@ -67,33 +71,28 @@ pipeline {
                     string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
                     string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN'),
                 ]) {
-                    container('awscli') {
-                        sh '''
-                            export AWS_DEFAULT_REGION=${AWS_REGION}
-                            aws sts get-caller-identity
-                            aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
-                        '''
-                    }
-                    container('helm') {
-                        sh '''
-                            helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-                            helm repo update
+                    sh '''
+                        export AWS_DEFAULT_REGION=${AWS_REGION}
+                        aws sts get-caller-identity
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
 
-                            helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
-                              -f k8s-values-bindplane.yaml \
-                              -n ${K8S_NAMESPACE} --create-namespace
+                        helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+                        helm repo update
 
-                            # NOTE: assumes the chart names this deployment exactly "agent" —
-                            # verify with `kubectl get deployment -n ${K8S_NAMESPACE}` if this fails.
-                            kubectl -n ${K8S_NAMESPACE} set env deployment/agent \
-                              DT_RELEASE_VERSION=${RELEASE_ID} \
-                              DT_RELEASE_PRODUCT=astronomy-shop-agent \
-                              DT_RELEASE_STAGE=staging \
-                              DT_RELEASE_BUILD_VERSION=${TAG}
+                        helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
+                          -f k8s-values-bindplane.yaml \
+                          -n ${K8S_NAMESPACE} --create-namespace
 
-                            kubectl -n ${K8S_NAMESPACE} rollout status deployment/agent --timeout=300s
-                        '''
-                    }
+                        # NOTE: assumes the chart names this deployment exactly "agent" —
+                        # verify with `kubectl get deployment -n ${K8S_NAMESPACE}` if this fails.
+                        kubectl -n ${K8S_NAMESPACE} set env deployment/agent \
+                          DT_RELEASE_VERSION=${RELEASE_ID} \
+                          DT_RELEASE_PRODUCT=astronomy-shop-agent \
+                          DT_RELEASE_STAGE=staging \
+                          DT_RELEASE_BUILD_VERSION=${TAG}
+
+                        kubectl -n ${K8S_NAMESPACE} rollout status deployment/agent --timeout=300s
+                    '''
                 }
             }
         }
@@ -105,46 +104,31 @@ pipeline {
                     string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
                     string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN'),
                 ]) {
-                    container('awscli') {
-                        sh '''
-                            export AWS_DEFAULT_REGION=${AWS_REGION}
-                            aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
-                        '''
-                    }
-                }
-
-                // Port-forwards run in the helm container (it has kubectl). The python
-                // container shares this pod's network namespace, so localhost:6006 /
-                // localhost:8010 are reachable from there once these come up.
-                container('helm') {
-                    sh 'bash arize/port-forward.sh'
-                }
-
-                // Same getAccessToken() as the easytrade pipeline — curl needs to run
-                // somewhere with it; amazon/aws-cli ships curl, so reuse that container.
-                container('awscli') {
-                    script {
-                        env.DT_API_TOKEN = getAccessToken()
-                    }
-                }
-
-                container('python') {
                     sh '''
-                        pip install --no-cache-dir -r arize/requirements.txt
-                        python3 arize/arize-dataset.py
-
-                        RELEASE_VERSION="${RELEASE_ID}" \
-                        AGENT_SERVICE_NAME=agent \
-                        DT_AUTH_SCHEME=Bearer \
-                        python3 arize/arize-experiment.py
+                        export AWS_DEFAULT_REGION=${AWS_REGION}
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
                     '''
                 }
+
+                sh 'bash arize/port-forward.sh'
+
+                script {
+                    env.DT_API_TOKEN = getAccessToken()
+                }
+
+                sh '''
+                    pip install --no-cache-dir -r arize/requirements.txt
+                    python3 arize/arize-dataset.py
+
+                    RELEASE_VERSION="${RELEASE_ID}" \
+                    AGENT_SERVICE_NAME=agent \
+                    DT_AUTH_SCHEME=Bearer \
+                    python3 arize/arize-experiment.py
+                '''
             }
             post {
                 always {
-                    container('helm') {
-                        sh 'bash arize/port-forward.sh stop || true'
-                    }
+                    sh 'bash arize/port-forward.sh stop || true'
                 }
             }
         }
