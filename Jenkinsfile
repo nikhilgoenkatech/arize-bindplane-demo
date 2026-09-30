@@ -52,13 +52,6 @@ pipeline {
         PLATFORM_CLIENT_URN    = credentials('client_urn')
         DT_ENV_URL             = 'https://ykd61701.sprint.dynatracelabs.com'
 
-        // NOTE: the Grail Query API lives on a different domain than the ingest
-        // APIs above (standard SaaS tenants use <env-id>.apps.dynatrace.com) —
-        // this "sprint" tenant uses non-standard domains throughout (its SSO URL
-        // isn't the standard one either), so this is an unverified guess. Confirm
-        // the correct query-API host for this tenant and fix this if polling 404s.
-        DT_QUERY_URL = 'https://ykd61701.apps.dynatracelabs.com'
-
         // How long to wait before the guardian's evaluation could possibly be done,
         // and how often to re-check after that. Tune once you know how long your
         // guardian's own objectives actually take to evaluate.
@@ -437,7 +430,7 @@ String pollForGuardianResult() {
         withEnv(["POLL_TOKEN=${token}", "POLL_BODY=${queryBody}"]) {
             response = sh(script: '''
                 set +x
-                curl -sS -X POST "${DT_QUERY_URL}/platform/storage/query/v1/query:execute" \
+                curl -sS -X POST "${DT_ENV_URL}/platform/storage/query/v1/query:execute" \
                     -H "Authorization: Bearer ${POLL_TOKEN}" \
                     -H "Content-Type: application/json" \
                     -d "${POLL_BODY}"
