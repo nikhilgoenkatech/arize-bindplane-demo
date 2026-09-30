@@ -7,10 +7,8 @@
 // Guardian in Dynatrace is the sole authority that combines this signal with
 // the release's live operational telemetry to qualify it.
 //
-// Assumes this job is configured as "Pipeline script from SCM" against this
-// repo, so the checkout Jenkins does before running the pipeline already
-// gives every stage the working tree — the Build stage below only reads git
-// metadata, it does not re-clone.
+// The Build stage checks out this repo explicitly (this Jenkins job does not
+// do an implicit SCM checkout before the pipeline runs — same as easytrade).
 //
 // New Jenkins credentials needed (secret text):
 //   openai-api-key   OpenAI key used by the LLM-as-judge evaluators
@@ -19,6 +17,7 @@
 // about Dynatrace auth is reinvented here):
 //   aws-access-key, aws-secret-key, aws-session-token
 //   client_id, client_secret, client_urn
+//   GITCREDENTIALS (used for the repo checkout below)
 
 pipeline {
     agent {
@@ -49,6 +48,10 @@ pipeline {
         stage('Build') {
             steps {
                 script {
+                    git branch: 'main',
+                        credentialsId: 'GITCREDENTIALS',
+                        url: 'https://github.com/nikhilgoenkatech/arize-bindplane-demo.git'
+
                     env.TAG = sh(script: 'git log --pretty=format:"%h" -n 1', returnStdout: true).trim()
                     env.GIT_BRANCH = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
                     env.RELEASE_ID = "1.0.${BUILD_ID}"
