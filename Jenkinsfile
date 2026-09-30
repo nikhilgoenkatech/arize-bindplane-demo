@@ -13,11 +13,12 @@
 // metadata, it does not re-clone.
 //
 // New Jenkins credentials needed (secret text):
-//   dt-api-token     Dynatrace token/OAuth token, scope bizevents.ingest (or
-//                     openpipeline:bizevents:ingest for a platform token)
 //   openai-api-key   OpenAI key used by the LLM-as-judge evaluators
-// Reused from the easytrade pipeline (same Jenkins credential store):
+// Reused as-is from the easytrade pipeline (same Jenkins credential store,
+// same OAuth2 client-credentials flow via getAccessToken() below — nothing
+// about Dynatrace auth is reinvented here):
 //   aws-access-key, aws-secret-key, aws-session-token
+//   client_id, client_secret, client_urn
 
 pipeline {
     agent {
@@ -32,9 +33,13 @@ pipeline {
         K8S_NAMESPACE    = 'llm-obs-demo'
         KUBECONFIG       = "${WORKSPACE}/.kube/config"
 
-        // Not secret, just the tenant URL this pipeline reports eval outcomes to.
-        DT_ENV_URL   = 'https://<your-environment-id>.live.dynatrace.com'
-        DT_API_TOKEN = credentials('dt-api-token')
+        // Same OAuth2 client-credentials app + same Dynatrace tenant already
+        // used by the easytrade pipeline's getAccessToken()/ingestBizEvents().
+        PLATFORM_CLIENT        = credentials('client_id')
+        PLATFORM_CLIENT_SECRET = credentials('client_secret')
+        PLATFORM_CLIENT_URN    = credentials('client_urn')
+        DT_ENV_URL             = 'https://ykd61701.sprint.dynatracelabs.com'
+
         OPENAI_API_KEY = credentials('openai-api-key')
     }
 
@@ -111,6 +116,14 @@ pipeline {
                     sh 'bash arize/port-forward.sh'
                 }
 
+                // Same getAccessToken() as the easytrade pipeline — curl needs to run
+                // somewhere with it; amazon/aws-cli ships curl, so reuse that container.
+                container('awscli') {
+                    script {
+                        env.DT_API_TOKEN = getAccessToken()
+                    }
+                }
+
                 container('python') {
                     sh '''
                         pip install --no-cache-dir -r arize/requirements.txt
@@ -118,7 +131,7 @@ pipeline {
 
                         RELEASE_VERSION="${RELEASE_ID}" \
                         AGENT_SERVICE_NAME=agent \
-                        DT_AUTH_SCHEME=Api-Token \
+                        DT_AUTH_SCHEME=Bearer \
                         python3 arize/arize-experiment.py
                     '''
                 }
@@ -132,4 +145,23 @@ pipeline {
             }
         }
     }
+}
+
+// Copied verbatim from the easytrade pipeline — same OAuth2 client-credentials
+// exchange, same scope, same SSO endpoint. Do not fork this per-app; if the
+// scope or endpoint ever changes it should change for both pipelines at once.
+String getAccessToken() {
+    print("Getting OAuth2 token")
+    final String tokenResponse = sh(script: '''
+        set +x
+        curl -sLX POST "https://sso-sprint.dynatracelabs.com/sso/oauth2/token" \
+            --header "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${PLATFORM_CLIENT}" \
+            --data-urlencode "client_secret=${PLATFORM_CLIENT_SECRET}" \
+            --data-urlencode "resource=urn:dtaccount:${PLATFORM_CLIENT_URN}" \
+            --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write"
+        set -x
+    ''', returnStdout: true).trim()
+    return readJSON(text: tokenResponse).access_token
 }
