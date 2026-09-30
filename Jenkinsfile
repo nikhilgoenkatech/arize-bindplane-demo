@@ -52,6 +52,20 @@ pipeline {
         PLATFORM_CLIENT_URN    = credentials('client_urn')
         DT_ENV_URL             = 'https://ykd61701.sprint.dynatracelabs.com'
 
+        // NOTE: the Grail Query API lives on a different domain than the ingest
+        // APIs above (standard SaaS tenants use <env-id>.apps.dynatrace.com) —
+        // this "sprint" tenant uses non-standard domains throughout (its SSO URL
+        // isn't the standard one either), so this is an unverified guess. Confirm
+        // the correct query-API host for this tenant and fix this if polling 404s.
+        DT_QUERY_URL = 'https://ykd61701.apps.dynatracelabs.com'
+
+        // How long to wait before the guardian's evaluation could possibly be done,
+        // and how often to re-check after that. Tune once you know how long your
+        // guardian's own objectives actually take to evaluate.
+        SRG_INITIAL_DELAY_SECONDS = '60'
+        SRG_POLL_INTERVAL_SECONDS = '30'
+        SRG_MAX_POLL_ATTEMPTS     = '10'
+
         OPENAI_API_KEY = credentials('openai-api-key')
     }
 
@@ -273,6 +287,70 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                 }
             }
         }
+
+        stage('Release Gate (SRG Approval)') {
+            steps {
+                script {
+                    sendSdlcEvent([
+                        'event.type': 'validation',
+                        'event.status': 'started',
+                        'task.name': 'Release Gate (SRG Approval)',
+                    ])
+
+                    triggerGuardianValidation()
+                    def verdict = pollForGuardianResult()
+                    echo "Guardian verdict for release ${env.RELEASE_ID}: ${verdict}"
+
+                    if (verdict != 'pass') {
+                        sendSdlcEvent([
+                            'event.type': 'validation',
+                            'event.status': 'finished',
+                            'task.name': 'Release Gate (SRG Approval)',
+                            'task.outcome': 'Failure',
+                        ])
+                        error("Dynatrace Site Reliability Guardian did not approve release ${env.RELEASE_ID} (verdict: ${verdict})")
+                    }
+
+                    sendSdlcEvent([
+                        'event.type': 'validation',
+                        'event.status': 'finished',
+                        'task.name': 'Release Gate (SRG Approval)',
+                        'task.outcome': 'Success',
+                    ])
+                }
+            }
+        }
+
+        // Demo-only: this is a narrative beat, not a real deployment. There is no
+        // separate production environment/cluster in this setup — the point is to
+        // show the shape of the story (guardian approves -> release proceeds),
+        // not to actually stand up a second environment.
+        stage('Proceed to Production') {
+            steps {
+                script {
+                    sendSdlcEvent([
+                        'event.type': 'deployment',
+                        'event.status': 'started',
+                        'task.name': 'Proceed to Production',
+                        'cicd.deployment.name': 'astronomy-shop-agent',
+                        'cicd.deployment.release_stage': 'production',
+                    ])
+
+                    echo "Release ${env.RELEASE_ID} approved by Dynatrace SRG -- proceeding to production."
+
+                    sendSdlcEvent([
+                        'event.type': 'deployment',
+                        'event.status': 'finished',
+                        'task.name': 'Proceed to Production',
+                        'task.outcome': 'Success',
+                        'cicd.deployment.status': 'succeeded',
+                        'cicd.deployment.name': 'astronomy-shop-agent',
+                        'cicd.deployment.release_stage': 'production',
+                        'artifact.version': env.RELEASE_ID,
+                    ])
+                }
+            }
+        }
     }
 }
 
@@ -307,12 +385,87 @@ void sendSdlcEvent(Map fields) {
     }
 }
 
+// Fires the bizevent that triggers the Dynatrace workflow/guardian configured
+// on the Dynatrace side (that workflow config is out of scope here). Contract:
+// event.type == "guardian.validation.triggered", correlated on release.version
+// with both the arize-experiment.py bizevent and the result event the workflow
+// is expected to emit back (event.type == "guardian.validation.result",
+// same release.version, a "result" field of "pass"/"fail").
+void triggerGuardianValidation() {
+    def payload = [
+        'event.type'      : 'guardian.validation.triggered',
+        'event.provider'  : 'jenkins',
+        'service'         : 'astronomy-shop-agent',
+        'stage'           : 'staging',
+        'release.version' : env.RELEASE_ID,
+    ]
+    def token = getAccessToken()
+    def body = writeJSON(json: payload, returnText: true)
+    withEnv(["TRIGGER_TOKEN=${token}", "TRIGGER_BODY=${body}"]) {
+        sh '''
+            set +x
+            curl -sS -X POST "${DT_ENV_URL}/api/v2/bizevents/ingest" \
+                -H "Authorization: Bearer ${TRIGGER_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "${TRIGGER_BODY}"
+            set -x
+        '''
+    }
+}
+
+// Polls Grail via DQL for the guardian's result event (see triggerGuardianValidation
+// for the expected contract) until found or SRG_MAX_POLL_ATTEMPTS is exhausted.
+// Returns "pass", "fail", or "timeout". Waits SRG_INITIAL_DELAY_SECONDS before the
+// first check (the guardian can't possibly be done before its own evaluation
+// window elapses, so there's no point checking sooner), then re-checks every
+// SRG_POLL_INTERVAL_SECONDS.
+String pollForGuardianResult() {
+    int initialDelay = (env.SRG_INITIAL_DELAY_SECONDS ?: '60') as int
+    int pollInterval = (env.SRG_POLL_INTERVAL_SECONDS ?: '30') as int
+    int maxAttempts = (env.SRG_MAX_POLL_ATTEMPTS ?: '10') as int
+
+    echo "Waiting ${initialDelay}s before checking for a guardian result..."
+    sleep(time: initialDelay, unit: 'SECONDS')
+
+    def dql = "fetch bizevents | filter event.type == \"guardian.validation.result\" and " +
+        "`release.version` == \"${env.RELEASE_ID}\" | limit 1"
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        def token = getAccessToken()
+        def queryBody = writeJSON(json: ['query': dql], returnText: true)
+        String response
+        withEnv(["POLL_TOKEN=${token}", "POLL_BODY=${queryBody}"]) {
+            response = sh(script: '''
+                set +x
+                curl -sS -X POST "${DT_QUERY_URL}/platform/storage/query/v1/query:execute" \
+                    -H "Authorization: Bearer ${POLL_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    -d "${POLL_BODY}"
+                set -x
+            ''', returnStdout: true).trim()
+        }
+
+        def parsed = readJSON(text: response)
+        def records = parsed?.result?.records
+        if (records && records.size() > 0) {
+            return records[0]['result']
+        }
+
+        echo "Guardian result not yet available (attempt ${attempt}/${maxAttempts})"
+        if (attempt < maxAttempts) {
+            sleep(time: pollInterval, unit: 'SECONDS')
+        }
+    }
+    return 'timeout'
+}
+
 // Copied verbatim from the easytrade pipeline — same OAuth2 client-credentials
 // exchange, same SSO endpoint. Do not fork this per-app; if the endpoint ever
 // changes it should change for both pipelines at once. Scope was widened here
-// (openpipeline:events.sdlc:ingest added) to cover sendSdlcEvent's needs on
-// top of the original bizevents scope — that's additive, not a behavior change
-// for the existing bizevents usage.
+// (openpipeline:events.sdlc:ingest, storage:events:read added) to cover
+// sendSdlcEvent's and pollForGuardianResult's needs on top of the original
+// bizevents scope — that's additive, not a behavior change for the existing
+// bizevents usage.
 String getAccessToken() {
     print("Getting OAuth2 token")
     final String tokenResponse = sh(script: '''
@@ -323,7 +476,7 @@ String getAccessToken() {
             --data-urlencode "client_id=${PLATFORM_CLIENT}" \
             --data-urlencode "client_secret=${PLATFORM_CLIENT_SECRET}" \
             --data-urlencode "resource=urn:dtaccount:${PLATFORM_CLIENT_URN}" \
-            --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write openpipeline:events.sdlc:ingest"
+            --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write storage:events:read openpipeline:events.sdlc:ingest"
         set -x
     ''', returnStdout: true).trim()
     return readJSON(text: tokenResponse).access_token
