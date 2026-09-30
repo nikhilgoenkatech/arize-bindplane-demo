@@ -60,6 +60,12 @@ pipeline {
         stage('Build') {
             steps {
                 script {
+                    sendSdlcEvent([
+                        'event.type': 'build',
+                        'event.status': 'started',
+                        'task.name': 'Build',
+                    ])
+
                     git branch: 'main',
                         credentialsId: 'GITCREDENTIALS',
                         url: 'https://github.com/nikhilgoenkatech/arize-bindplane-demo.git'
@@ -70,10 +76,47 @@ pipeline {
                     echo "Release ${env.RELEASE_ID} — commit ${env.TAG} on ${env.GIT_BRANCH}"
                 }
             }
+            post {
+                success {
+                    script {
+                        sendSdlcEvent([
+                            'event.type': 'build',
+                            'event.status': 'finished',
+                            'task.name': 'Build',
+                            'task.outcome': 'Success',
+                            'artifact.id': 'astronomy-shop-agent',
+                            'artifact.version': env.RELEASE_ID,
+                            'vcs.repository.name': 'arize-bindplane-demo',
+                            'vcs.ref.head.name': env.GIT_BRANCH,
+                            'vcs.ref.head.revision': env.TAG,
+                        ])
+                    }
+                }
+                failure {
+                    script {
+                        sendSdlcEvent([
+                            'event.type': 'build',
+                            'event.status': 'finished',
+                            'task.name': 'Build',
+                            'task.outcome': 'Failure',
+                        ])
+                    }
+                }
+            }
         }
 
         stage('Deploy') {
             steps {
+                script {
+                    sendSdlcEvent([
+                        'event.type': 'deployment',
+                        'event.status': 'started',
+                        'task.name': 'Deploy',
+                        'cicd.deployment.name': 'astronomy-shop-agent',
+                        'cicd.deployment.namespace': env.K8S_NAMESPACE,
+                        'cicd.deployment.release_stage': 'staging',
+                    ])
+                }
                 withCredentials([
                     string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
@@ -126,10 +169,48 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     '''
                 }
             }
+            post {
+                success {
+                    script {
+                        sendSdlcEvent([
+                            'event.type': 'deployment',
+                            'event.status': 'finished',
+                            'task.name': 'Deploy',
+                            'task.outcome': 'Success',
+                            'cicd.deployment.status': 'succeeded',
+                            'cicd.deployment.name': 'astronomy-shop-agent',
+                            'cicd.deployment.namespace': env.K8S_NAMESPACE,
+                            'cicd.deployment.release_stage': 'staging',
+                            'artifact.version': env.RELEASE_ID,
+                        ])
+                    }
+                }
+                failure {
+                    script {
+                        sendSdlcEvent([
+                            'event.type': 'deployment',
+                            'event.status': 'finished',
+                            'task.name': 'Deploy',
+                            'task.outcome': 'Failure',
+                            'cicd.deployment.status': 'failed',
+                            'cicd.deployment.name': 'astronomy-shop-agent',
+                            'cicd.deployment.namespace': env.K8S_NAMESPACE,
+                        ])
+                    }
+                }
+            }
         }
 
         stage('Validation (Agent Eval)') {
             steps {
+                script {
+                    sendSdlcEvent([
+                        'event.type': 'validation',
+                        'event.status': 'started',
+                        'task.name': 'Validation (Agent Eval)',
+                    ])
+                }
+
                 // kubectl (via the kubeconfig aws eks update-kubeconfig writes) calls out to
                 // `aws eks get-token` on every invocation rather than embedding static
                 // credentials — so update-kubeconfig AND the kubectl port-forward calls
@@ -170,14 +251,68 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                 always {
                     sh 'bash arize/port-forward.sh stop || true'
                 }
+                success {
+                    script {
+                        sendSdlcEvent([
+                            'event.type': 'validation',
+                            'event.status': 'finished',
+                            'task.name': 'Validation (Agent Eval)',
+                            'task.outcome': 'Success',
+                        ])
+                    }
+                }
+                failure {
+                    script {
+                        sendSdlcEvent([
+                            'event.type': 'validation',
+                            'event.status': 'finished',
+                            'task.name': 'Validation (Agent Eval)',
+                            'task.outcome': 'Failure',
+                        ])
+                    }
+                }
             }
         }
     }
 }
 
+// Sends one SDLC event (task or pipeline, per Dynatrace's semantic dictionary:
+// https://docs.dynatrace.com/docs/semantic-dictionary/model/sdlc-events) to the
+// built-in ingest endpoint. Fetches its own fresh token per call rather than
+// reusing one across the pipeline's lifetime, since Deploy/Validation can run
+// long enough for an earlier token to expire — same reasoning as why
+// getAccessToken() is called fresh before every ingestBizEvents() in easytrade.
+// Requires openpipeline:events.sdlc:ingest scope on the OAuth client; if this
+// 403s, that scope needs to be granted to the client in Dynatrace's IAM first —
+// not something this pipeline can grant itself.
+void sendSdlcEvent(Map fields) {
+    def payload = [
+        'event.provider'          : 'jenkins',
+        'cicd.pipeline.id'        : env.JOB_NAME,
+        'cicd.pipeline.run.id'    : env.BUILD_ID,
+        'cicd.pipeline.run.url.full': env.BUILD_URL,
+    ] + fields
+
+    def token = getAccessToken()
+    def body = writeJSON(json: payload, returnText: true)
+    withEnv(["SDLC_TOKEN=${token}", "SDLC_BODY=${body}"]) {
+        sh '''
+            set +x
+            curl -sS -X POST "${DT_ENV_URL}/platform/ingest/v1/events.sdlc" \
+                -H "Authorization: Bearer ${SDLC_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "${SDLC_BODY}"
+            set -x
+        '''
+    }
+}
+
 // Copied verbatim from the easytrade pipeline — same OAuth2 client-credentials
-// exchange, same scope, same SSO endpoint. Do not fork this per-app; if the
-// scope or endpoint ever changes it should change for both pipelines at once.
+// exchange, same SSO endpoint. Do not fork this per-app; if the endpoint ever
+// changes it should change for both pipelines at once. Scope was widened here
+// (openpipeline:events.sdlc:ingest added) to cover sendSdlcEvent's needs on
+// top of the original bizevents scope — that's additive, not a behavior change
+// for the existing bizevents usage.
 String getAccessToken() {
     print("Getting OAuth2 token")
     final String tokenResponse = sh(script: '''
@@ -188,7 +323,7 @@ String getAccessToken() {
             --data-urlencode "client_id=${PLATFORM_CLIENT}" \
             --data-urlencode "client_secret=${PLATFORM_CLIENT_SECRET}" \
             --data-urlencode "resource=urn:dtaccount:${PLATFORM_CLIENT_URN}" \
-            --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write"
+            --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write openpipeline:events.sdlc:ingest"
         set -x
     ''', returnStdout: true).trim()
     return readJSON(text: tokenResponse).access_token
