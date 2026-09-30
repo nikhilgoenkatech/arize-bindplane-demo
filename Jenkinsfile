@@ -22,7 +22,8 @@
 
 pipeline {
     agent {
-        kubernetes {
+        any {
+            idleMinutes '0'
             yamlFile 'pipeline/jenkins/pod.yaml'
         }
     }
