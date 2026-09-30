@@ -135,6 +135,18 @@ components:
         value: "http://otel-collector:4318"
       - name: APPLICATION_ENDPOINT
         value: "frontend:8080"
+      - name: DT_RELEASE_PRODUCT
+        value: "astronomy-shop-agent"
+      - name: DT_RELEASE_STAGE
+        value: "staging"
+      # Indices 11/12 below are overridden per-deploy by the Jenkins pipeline via
+      # `helm upgrade --set components.agent.env[11].value=<release id>
+      #                    --set components.agent.env[12].value=<git sha>`.
+      # If you add/remove/reorder entries in this list, update those indices too.
+      - name: DT_RELEASE_VERSION
+        value: "unknown"
+      - name: DT_RELEASE_BUILD_VERSION
+        value: "unknown"
 
   chatbot:
     env:

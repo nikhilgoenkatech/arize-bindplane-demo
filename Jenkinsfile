@@ -79,18 +79,17 @@ pipeline {
                         helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
                         helm repo update
 
+                        # env[11]/env[12] here must match the DT_RELEASE_VERSION/
+                        # DT_RELEASE_BUILD_VERSION positions in k8s-values-bindplane.yaml's
+                        # components.agent.env list — update both places together.
                         helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
                           -f k8s-values-bindplane.yaml \
+                          --set components.agent.env[11].value="${RELEASE_ID}" \
+                          --set components.agent.env[12].value="${TAG}" \
                           -n ${K8S_NAMESPACE} --create-namespace
 
                         # NOTE: assumes the chart names this deployment exactly "agent" —
                         # verify with `kubectl get deployment -n ${K8S_NAMESPACE}` if this fails.
-                        kubectl -n ${K8S_NAMESPACE} set env deployment/agent \
-                          DT_RELEASE_VERSION=${RELEASE_ID} \
-                          DT_RELEASE_PRODUCT=astronomy-shop-agent \
-                          DT_RELEASE_STAGE=staging \
-                          DT_RELEASE_BUILD_VERSION=${TAG}
-
                         kubectl -n ${K8S_NAMESPACE} rollout status deployment/agent --timeout=300s
                     '''
                 }
