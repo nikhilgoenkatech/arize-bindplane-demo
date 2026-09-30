@@ -129,8 +129,7 @@ def call_live_agent(message: str) -> dict:
         messages = data.get("messages", [])
 
         output = ""
-        tool_called = ""
-        tool_args_actual: dict = {}
+        tools_called: list[dict] = []
 
         for msg in messages:
             if not isinstance(msg, dict):
@@ -141,38 +140,59 @@ def call_live_agent(message: str) -> dict:
                 output = msg["content"]
 
             tool_calls = msg.get("tool_calls")
-            if tool_calls and isinstance(tool_calls, list) and isinstance(tool_calls[0], dict):
-                call = tool_calls[0]
-                tool_called = call.get("name", "")
+            if not tool_calls or not isinstance(tool_calls, list):
+                continue
+
+            for call in tool_calls:
+                if not isinstance(call, dict):
+                    continue
+                name = call.get("name", "")
                 raw_args = call.get("args", call.get("arguments", {}))
                 if isinstance(raw_args, dict):
-                    tool_args_actual = raw_args
+                    args = raw_args
                 else:
                     try:
-                        tool_args_actual = json.loads(raw_args) if raw_args not in ("{}", "", None) else {}
+                        args = json.loads(raw_args) if raw_args not in ("{}", "", None) else {}
                     except (json.JSONDecodeError, TypeError):
-                        tool_args_actual = {}
+                        args = {}
+                tools_called.append({"name": name, "args": args})
 
-        return {"output": output, "tool_called": tool_called, "tool_args": tool_args_actual}
+        first = tools_called[0] if tools_called else {"name": "", "args": {}}
+        return {
+            "output": output,
+            "tools_called": tools_called,
+            "tool_called": first["name"],
+            "tool_args": first["args"],
+        }
     except Exception as exc:
-        return {"output": f"ERROR: {exc}", "tool_called": "", "tool_args": {}}
+        return {"output": f"ERROR: {exc}", "tools_called": [], "tool_called": "", "tool_args": {}}
 
 
 # ── Code-based evaluators ─────────────────────────────────────────────────────
 
 def eval_tool_selection(actual: dict, metadata: dict) -> dict:
-    got = actual.get("tool_called", "")
     expected = metadata.get("expected_tool", "")
-    correct = got == expected
+    called_names = [c.get("name", "") for c in actual.get("tools_called", [])]
+    unexpected = [n for n in called_names if n != expected]
+    correct = expected in called_names and not unexpected
     return {
         "score": 1.0 if correct else 0.0,
         "label": "correct" if correct else "wrong",
-        "explanation": f"expected={expected!r} got={got!r}",
+        "explanation": (
+            f"expected={expected!r} matched, no extra calls"
+            if correct
+            else f"expected={expected!r} got={called_names!r}"
+        ),
     }
 
 
 def eval_tool_args_match(actual: dict, metadata: dict) -> dict:
-    actual_args = actual.get("tool_args", {})
+    expected_tool = metadata.get("expected_tool", "")
+    matching_call = next(
+        (c for c in actual.get("tools_called", []) if c.get("name") == expected_tool), None
+    )
+    actual_args = matching_call.get("args", {}) if matching_call else {}
+
     try:
         expected_args = json.loads(metadata.get("expected_tool_args", "{}"))
     except (json.JSONDecodeError, TypeError):
@@ -180,6 +200,13 @@ def eval_tool_args_match(actual: dict, metadata: dict) -> dict:
 
     if not expected_args:
         return {"score": 1.0, "label": "correct", "explanation": "tool takes no arguments"}
+
+    if matching_call is None:
+        return {
+            "score": 0.0,
+            "label": "wrong",
+            "explanation": f"expected tool {expected_tool!r} was never called",
+        }
 
     mismatches = [
         f"{k}: expected={v!r} got={actual_args.get(k)!r}"

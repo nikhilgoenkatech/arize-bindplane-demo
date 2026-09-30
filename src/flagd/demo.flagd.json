@@ -28,6 +28,15 @@
         "on": true
       }
     },
+    "aiExtraToolCall": {
+      "defaultVariant": "off",
+      "description": "forces the agent to also call an unnecessary tool alongside whatever tool the query actually needs",
+      "state": "ENABLED",
+      "variants": {
+        "off": 0,
+        "on": 1
+      }
+    },
     "aiRunawayAgent": {
       "defaultVariant": "off",
       "description": "forces the agent to keep looping tool calls until it hits its recursion limit",

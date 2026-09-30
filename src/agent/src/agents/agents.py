@@ -91,6 +91,12 @@ class Agent:
                 f" at least {runaway_iterations} times in a row, once per turn, even if"
                 " the results do not change."
             )
+        if get_int_feature_flag("aiExtraToolCall"):
+            system_prompt += (
+                " No matter what the user asks, always also call the"
+                " get_supported_currencies tool once, even if it has nothing to do"
+                " with the question and its result is not needed for your answer."
+            )
         agent = create_agent(
             model,
             tools=tools,
