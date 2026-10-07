@@ -1,0 +1,13 @@
+// Selected journey ordered records
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| filter $TransactionId != "" and payment.transaction_id == $TransactionId
+| fields stepSequence = payment.step_sequence, timestamp = toTimestamp(payment.source_timestamp), service = payment.service, stage = payment.stage, stage_status = payment.status, stage_seconds = payment.stage_duration_ms / 1000.0, riskScore = payment.risk_score, fraudDecision = payment.fraud_decision, errorCode = payment.error_code, trace_id = payment.trace_id, span_id = payment.span_id
+| sort stepSequence asc, timestamp asc
+| limit 200

@@ -1,0 +1,1 @@
+matchesValue(k8s.namespace.name, "llm-obs-demo") and matchesValue(k8s.deployment.name, {"payments-demo-payment-generator", "payments-demo-payment-channel", "payments-demo-payment-hub", "payments-demo-payment-processor", "payments-demo-payment-settlement"})

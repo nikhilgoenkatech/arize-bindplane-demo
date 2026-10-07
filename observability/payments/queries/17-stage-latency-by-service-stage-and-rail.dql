@@ -1,0 +1,13 @@
+// Stage latency by service, stage and rail
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| filter payment.record_kind == "stage" and payment.stage != "PAYMENT_GENERATED" and payment.stage_duration_ms >= 0
+| dedup payment.transaction_id, payment.stage, payment.step_sequence, payment.source_timestamp, payment.trace_id, payment.span_id
+| summarize avg_seconds = avg(payment.stage_duration_ms / 1000.0), p95_seconds = percentile(payment.stage_duration_ms / 1000.0, 95), records = count(), by: {payment.service, payment.stage, payment.rail}
+| sort p95_seconds desc

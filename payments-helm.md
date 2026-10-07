@@ -251,3 +251,12 @@ actual chart and check all five roles, service routing, release isolation, image
 overrides, probes, ConfigMap rollout checksums, Secret references, and invalid
 configuration rejection. Cluster deployment and telemetry delivery still need
 verification in your environment.
+
+## Dynatrace dashboard and OpenPipeline
+
+The [payments observability package](observability/payments/README.md) adds the
+Grail dashboard, final-log fallback, exact OpenPipeline UI configuration, DQL,
+field mapping, validation fixtures, and a six-minute presenter guide. Follow its
+[installation steps](observability/payments/install.md) after the application is
+running. These assets require no image rebuild or Helm upgrade. Tenant pipeline
+preview, native dashboard validation and live query checks remain required.

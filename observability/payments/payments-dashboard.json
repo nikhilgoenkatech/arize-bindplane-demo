@@ -1,0 +1,550 @@
+{
+  "version": 21,
+  "variables": [
+    {
+      "version": 2,
+      "key": "Rail",
+      "type": "csv",
+      "visible": true,
+      "editable": true,
+      "input": "ALL,NPP,BPAY,INTERNAL,SWIFT",
+      "multiple": false
+    },
+    {
+      "version": 2,
+      "key": "PaymentType",
+      "type": "csv",
+      "visible": true,
+      "editable": true,
+      "input": "ALL,PAYID,BPAY,ACCOUNT_TRANSFER,INTERNATIONAL_TRANSFER",
+      "multiple": false
+    },
+    {
+      "version": 2,
+      "key": "Channel",
+      "type": "csv",
+      "visible": true,
+      "editable": true,
+      "input": "ALL,ANZ_PLUS,MOBILE_BANKING,INTERNET_BANKING,CORPORATE_API",
+      "multiple": false
+    },
+    {
+      "version": 2,
+      "key": "CustomerSegment",
+      "type": "csv",
+      "visible": true,
+      "editable": true,
+      "input": "ALL,RETAIL,SMALL_BUSINESS,CORPORATE",
+      "multiple": false
+    },
+    {
+      "version": 2,
+      "key": "Scenario",
+      "type": "csv",
+      "visible": true,
+      "editable": true,
+      "input": "ALL,NORMAL,SLOW_SETTLEMENT,FAILED_PAYMENT",
+      "multiple": false
+    },
+    {
+      "version": 2,
+      "key": "TransactionId",
+      "type": "text",
+      "visible": true,
+      "editable": true,
+      "defaultValue": ""
+    },
+    {
+      "version": 2,
+      "key": "SlowSeconds",
+      "type": "csv",
+      "visible": true,
+      "editable": true,
+      "input": "3,1,2,5,8",
+      "multiple": false
+    }
+  ],
+  "tiles": {
+    "1": {
+      "type": "markdown",
+      "content": "# Payments — Activity, Outcomes & Journey\nSynthetic outbound AUD payments. Business KPIs read extracted completion events; operational detail reads logs.\nUse the timeframe and filters above. Completed = confirmed SUCCESS + FAILED. Failure rate uses that same denominator. Scripted coverage is deliberately failure-heavy; these are observed demo results, not production failure rates. SlowSeconds is a demo threshold, not a banking SLA."
+    },
+    "2": {
+      "type": "data",
+      "title": "Completed payments",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| summarize completed = count()",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "3": {
+      "type": "data",
+      "title": "Successful payments",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| summarize successful = countIf(payment.outcome == \"SUCCESS\")",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "4": {
+      "type": "data",
+      "title": "Failed payments",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| summarize failed = countIf(payment.outcome == \"FAILED\")",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "5": {
+      "type": "data",
+      "title": "Confirmed failure rate (%)",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| summarize completed = count(), failed = countIf(payment.outcome == \"FAILED\")\n| fields failure_rate_percent = if(completed > 0, 100.0 * failed / completed, else: null)",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "6": {
+      "type": "data",
+      "title": "P95 end-to-end (seconds)",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| filter payment.total_duration_ms >= 0\n| summarize p95_seconds = percentile(payment.total_duration_ms / 1000.0, 95)",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "7": {
+      "type": "data",
+      "title": "Successful payment value (AUD)",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" and payment.amount > 0 and payment.currency == \"AUD\"\n| summarize successful_value_AUD = sum(payment.amount)",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "8": {
+      "type": "data",
+      "title": "Slow successful payments",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| summarize slow_success = countIf(payment.outcome == \"SUCCESS\" and payment.total_duration_ms >= toDouble($SlowSeconds) * 1000)",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "9": {
+      "type": "data",
+      "title": "Uncertain final outcomes",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| summarize uncertain_final = countIf(payment.outcome == \"UNKNOWN\")",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "10": {
+      "type": "data",
+      "title": "Completed payment traffic",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| fieldsAdd timestamp = toTimestamp(payment.source_timestamp)\n| makeTimeseries payments = count(default: 0), interval: 5m",
+      "visualization": "lineChart",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "11": {
+      "type": "data",
+      "title": "Final outcome distribution",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| summarize payments = count(), by: {payment.outcome}",
+      "visualization": "donutChart",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "12": {
+      "type": "data",
+      "title": "Payment mix by rail",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| summarize payments = count(), by: {payment.rail}",
+      "visualization": "categoricalBarChart",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "13": {
+      "type": "data",
+      "title": "Payment mix by channel",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| summarize payments = count(), by: {payment.channel}",
+      "visualization": "categoricalBarChart",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "14": {
+      "type": "data",
+      "title": "Payments with transport errors",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.record_kind == \"transport\" and isNotNull(payment.transaction_id)\n| dedup payment.transaction_id\n| summarize affected_payments = count()",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "15": {
+      "type": "data",
+      "title": "No final outcome observed in selected window",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter isNotNull(payment.transaction_id)\n| summarize finals = countIf(payment.record_kind == \"final\"), by: {payment.transaction_id}\n| filter finals == 0\n| summarize payments_without_observed_final = count()",
+      "visualization": "singleValue",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "16": {
+      "type": "markdown",
+      "content": "## Delays and failures\nStage durations are exclusive local simulated processing time. Final end-to-end duration is never included in stage latency. Transport errors may overlap completed payments; do not add those counts together. A missing final record can reflect ingestion delay or a timeframe boundary."
+    },
+    "17": {
+      "type": "data",
+      "title": "Stage latency by service, stage and rail",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.record_kind == \"stage\" and payment.stage != \"PAYMENT_GENERATED\" and payment.stage_duration_ms >= 0\n| dedup payment.transaction_id, payment.stage, payment.step_sequence, payment.source_timestamp, payment.trace_id, payment.span_id\n| summarize avg_seconds = avg(payment.stage_duration_ms / 1000.0), p95_seconds = percentile(payment.stage_duration_ms / 1000.0, 95), records = count(), by: {payment.service, payment.stage, payment.rail}\n| sort p95_seconds desc",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "18": {
+      "type": "data",
+      "title": "End-to-end duration by rail and scenario",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"SUCCESS\" or payment.outcome == \"FAILED\"\n| summarize payments = count(), failed = countIf(payment.outcome == \"FAILED\"), avg_seconds = avg(payment.total_duration_ms / 1000.0), p95_seconds = percentile(payment.total_duration_ms / 1000.0, 95), by: {payment.rail, payment.scenario}",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "19": {
+      "type": "data",
+      "title": "Failures by error and terminating service",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"FAILED\"\n| summarize failed_payments = count(), by: {payment.error_code, terminating_service = payment.service}\n| sort failed_payments desc",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "20": {
+      "type": "data",
+      "title": "Recent slow and failed payments",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter payment.outcome == \"FAILED\" or payment.total_duration_ms >= toDouble($SlowSeconds) * 1000\n| fields timestamp = toTimestamp(payment.source_timestamp), transactionId = payment.transaction_id, rail = payment.rail, channel = payment.channel, scenario = payment.scenario, outcome = payment.outcome, total_seconds = payment.total_duration_ms / 1000.0, errorCode = payment.error_code, terminating_service = payment.service\n| sort timestamp desc\n| limit 50",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {}
+    },
+    "21": {
+      "type": "markdown",
+      "content": "## Selected payment journey — last 24 hours\nCopy a transactionId from the table above into the TransactionId variable. Clear conflicting rail/type/channel/segment/scenario filters. All related tiles respect these filters. Detail tiles use a labelled 24-hour lookback, independent of the overview timeframe. No table-click selection or trace URL is assumed. A processor failure correctly has no settlement stage."
+    },
+    "22": {
+      "type": "data",
+      "title": "Selected payment business context and termination",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter $TransactionId != \"\" and payment.transaction_id == $TransactionId\n| summarize final_records = countIf(payment.record_kind == \"final\"), observed_stages = collectDistinct(payment.stage), rail = takeAny(payment.rail), channel = takeAny(payment.channel), amount_AUD = takeAny(payment.amount), by: {payment.transaction_id}\n| fieldsAdd observation = if(final_records > 0, \"Final outcome observed: see completion row below\", else: \"No final outcome observed in detail window\")",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-24h",
+          "to": "now()"
+        }
+      }
+    },
+    "23": {
+      "type": "data",
+      "title": "Selected authoritative final outcome",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter $TransactionId != \"\" and payment.transaction_id == $TransactionId\n| filter payment.record_kind == \"final\"\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| fields transactionId = payment.transaction_id, outcome = payment.outcome, terminating_service = payment.service, total_seconds = payment.total_duration_ms / 1000.0, errorCode = payment.error_code, timestamp = toTimestamp(payment.source_timestamp)",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-24h",
+          "to": "now()"
+        }
+      }
+    },
+    "24": {
+      "type": "data",
+      "title": "Selected journey ordered records",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter $TransactionId != \"\" and payment.transaction_id == $TransactionId\n| fields stepSequence = payment.step_sequence, timestamp = toTimestamp(payment.source_timestamp), service = payment.service, stage = payment.stage, stage_status = payment.status, stage_seconds = payment.stage_duration_ms / 1000.0, riskScore = payment.risk_score, fraudDecision = payment.fraud_decision, errorCode = payment.error_code, trace_id = payment.trace_id, span_id = payment.span_id\n| sort stepSequence asc, timestamp asc\n| limit 200",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-24h",
+          "to": "now()"
+        }
+      }
+    },
+    "25": {
+      "type": "data",
+      "title": "Actual spans for selected payment — if ingested",
+      "query": "fetch spans\n| filter in(service.name, array(\"payment-generator\", \"payment-channel\", \"payment-hub\", \"payment-processor\", \"payment-settlement\"))\n| join [\nfetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter $TransactionId != \"\" and payment.transaction_id == $TransactionId\n| filter isNotNull(trace.id)\n| dedup trace.id\n| fields trace.id\n], on: {trace.id}, kind: inner\n| fields trace.id, span.id, service.name, span.name, start_time, duration\n| sort start_time asc\n| limit 100",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-24h",
+          "to": "now()"
+        }
+      }
+    },
+    "26": {
+      "type": "markdown",
+      "content": "## From service logs to business insight\nContainer stdout → existing log collection → payment-scoped routing → typed fields and quality flags → retained logs + one extracted event per final record → DQL deduplication and analysis. OpenPipeline transforms individual records; DQL reconstructs the multi-service journey.\nSelect a transaction to compare raw and normalized records. Copy its trace ID into Distributed Tracing only when the actual-span table shows data. Trace IDs alone do not prove trace ingestion."
+    },
+    "27": {
+      "type": "data",
+      "title": "Raw source log and normalized fields",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter $TransactionId != \"\" and payment.transaction_id == $TransactionId\n| fields timestamp, raw_content = content, transactionId = payment.transaction_id, journeyId = payment.journey_id, amount = payment.amount, service = payment.service, stage = payment.stage, record_kind = payment.record_kind, outcome = payment.outcome, total_ms = payment.total_duration_ms, schema = demo.schema_version, trace.id\n| sort timestamp asc\n| limit 20",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-24h",
+          "to": "now()"
+        }
+      }
+    },
+    "28": {
+      "type": "data",
+      "title": "Extracted final business-event example",
+      "query": "fetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| filter $TransactionId != \"\" and payment.transaction_id == $TransactionId\n| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}\n| fields timestamp, event.type, event.provider, demo.name, demo.schema_version, payment.transaction_id, payment.outcome, payment.total_duration_ms, payment.amount, payment.service, payment.error_code, trace.id",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-24h",
+          "to": "now()"
+        }
+      }
+    },
+    "29": {
+      "type": "data",
+      "title": "Transformation quality — settled 2-hour window",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| summarize relevant_logs = count(), recognized_final_logs = countIf(payment.record_kind == \"final\"), missing_required = countIf(payment.quality.missing_required == true), parse_failures = countIf(payment.quality.parse_failed == true), invalid_values = countIf(payment.quality.invalid_values == true), unrecognized = countIf(payment.quality.unrecognized == true)",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-2h",
+          "to": "now()-2m"
+        }
+      }
+    },
+    "30": {
+      "type": "data",
+      "title": "Extraction coverage — settled 2-hour window",
+      "query": "fetch logs\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter payment.record_kind == \"final\" and isNotNull(payment.transaction_id)\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| fields payment.transaction_id, payment.source_timestamp, source = \"final_log\"\n| append [\nfetch bizevents\n| filter event.type == \"demo.payment.completed\" and event.provider == \"synthetic-payments-demo\"\n| filter demo.name == \"synthetic-payments-demo\" and demo.schema_version == \"1\"\n| filter isNotNull(payment.transaction_id)\n| filter $Rail == \"ALL\" or payment.rail == $Rail\n| filter $PaymentType == \"ALL\" or payment.type == $PaymentType\n| filter $Channel == \"ALL\" or payment.channel == $Channel\n| filter $CustomerSegment == \"ALL\" or payment.customer_segment == $CustomerSegment\n| filter $Scenario == \"ALL\" or payment.scenario == $Scenario\n| filter $TransactionId == \"\" or payment.transaction_id == $TransactionId\n| fields payment.transaction_id, payment.source_timestamp, source = \"business_event\"\n]\n| summarize log_records = countIf(source == \"final_log\"), event_records = countIf(source == \"business_event\"), by: {payment.transaction_id}\n| summarize final_log_records = sum(log_records), extracted_event_records = sum(event_records), unique_final_log_payments = countIf(log_records > 0), unique_event_payments = countIf(event_records > 0), missing_event_payments = countIf(log_records > 0 and event_records == 0), events_without_log = countIf(event_records > 0 and log_records == 0), duplicate_final_logs = sum(if(log_records > 1, log_records - 1, else: 0)), duplicate_events = sum(if(event_records > 1, event_records - 1, else: 0))",
+      "visualization": "table",
+      "visualizationSettings": {},
+      "querySettings": {},
+      "timeframe": {
+        "tileTimeframeEnabled": true,
+        "tileTimeframe": {
+          "from": "now()-2h",
+          "to": "now()-2m"
+        }
+      }
+    },
+    "31": {
+      "type": "markdown",
+      "content": "Quality panels use the same last-2-hours window ending 2 minutes ago to allow ingestion to settle. This is extraction coverage, not payment success. Increase the lag if your ingestion takes longer. Unrecognized/runtime logs are not payments. Filters may hide malformed records without those fields: reset filters to ALL and clear TransactionId for the full quality audit. No-data P95/rate/value remains empty; zero counts do not prove ingestion is healthy. In fallback mode, event panels can remain empty until extraction is enabled."
+    }
+  },
+  "layouts": {
+    "1": {
+      "x": 0,
+      "y": 0,
+      "w": 24,
+      "h": 4
+    },
+    "2": {
+      "x": 0,
+      "y": 4,
+      "w": 6,
+      "h": 3
+    },
+    "3": {
+      "x": 6,
+      "y": 4,
+      "w": 6,
+      "h": 3
+    },
+    "4": {
+      "x": 12,
+      "y": 4,
+      "w": 6,
+      "h": 3
+    },
+    "5": {
+      "x": 18,
+      "y": 4,
+      "w": 6,
+      "h": 3
+    },
+    "6": {
+      "x": 0,
+      "y": 7,
+      "w": 6,
+      "h": 3
+    },
+    "7": {
+      "x": 6,
+      "y": 7,
+      "w": 6,
+      "h": 3
+    },
+    "8": {
+      "x": 12,
+      "y": 7,
+      "w": 6,
+      "h": 3
+    },
+    "9": {
+      "x": 18,
+      "y": 7,
+      "w": 6,
+      "h": 3
+    },
+    "10": {
+      "x": 0,
+      "y": 10,
+      "w": 12,
+      "h": 5
+    },
+    "11": {
+      "x": 12,
+      "y": 10,
+      "w": 12,
+      "h": 5
+    },
+    "12": {
+      "x": 0,
+      "y": 15,
+      "w": 12,
+      "h": 5
+    },
+    "13": {
+      "x": 12,
+      "y": 15,
+      "w": 12,
+      "h": 5
+    },
+    "14": {
+      "x": 0,
+      "y": 20,
+      "w": 12,
+      "h": 3
+    },
+    "15": {
+      "x": 12,
+      "y": 20,
+      "w": 12,
+      "h": 3
+    },
+    "16": {
+      "x": 0,
+      "y": 23,
+      "w": 24,
+      "h": 3
+    },
+    "17": {
+      "x": 0,
+      "y": 26,
+      "w": 24,
+      "h": 5
+    },
+    "18": {
+      "x": 0,
+      "y": 31,
+      "w": 24,
+      "h": 5
+    },
+    "19": {
+      "x": 0,
+      "y": 36,
+      "w": 24,
+      "h": 5
+    },
+    "20": {
+      "x": 0,
+      "y": 41,
+      "w": 24,
+      "h": 7
+    },
+    "21": {
+      "x": 0,
+      "y": 48,
+      "w": 24,
+      "h": 4
+    },
+    "22": {
+      "x": 0,
+      "y": 52,
+      "w": 24,
+      "h": 5
+    },
+    "23": {
+      "x": 0,
+      "y": 57,
+      "w": 24,
+      "h": 5
+    },
+    "24": {
+      "x": 0,
+      "y": 62,
+      "w": 24,
+      "h": 8
+    },
+    "25": {
+      "x": 0,
+      "y": 70,
+      "w": 24,
+      "h": 5
+    },
+    "26": {
+      "x": 0,
+      "y": 75,
+      "w": 24,
+      "h": 4
+    },
+    "27": {
+      "x": 0,
+      "y": 79,
+      "w": 24,
+      "h": 7
+    },
+    "28": {
+      "x": 0,
+      "y": 86,
+      "w": 24,
+      "h": 5
+    },
+    "29": {
+      "x": 0,
+      "y": 91,
+      "w": 24,
+      "h": 5
+    },
+    "30": {
+      "x": 0,
+      "y": 96,
+      "w": 24,
+      "h": 5
+    },
+    "31": {
+      "x": 0,
+      "y": 101,
+      "w": 24,
+      "h": 4
+    }
+  },
+  "settings": {
+    "defaultTimeframe": {
+      "value": {
+        "from": "now()-2h",
+        "to": "now()"
+      },
+      "enabled": true
+    }
+  }
+}

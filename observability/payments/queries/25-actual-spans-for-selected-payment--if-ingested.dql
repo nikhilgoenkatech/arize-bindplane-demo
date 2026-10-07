@@ -1,0 +1,20 @@
+// Actual spans for selected payment — if ingested
+fetch spans
+| filter in(service.name, array("payment-generator", "payment-channel", "payment-hub", "payment-processor", "payment-settlement"))
+| join [
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| filter $TransactionId != "" and payment.transaction_id == $TransactionId
+| filter isNotNull(trace.id)
+| dedup trace.id
+| fields trace.id
+], on: {trace.id}, kind: inner
+| fields trace.id, span.id, service.name, span.name, start_time, duration
+| sort start_time asc
+| limit 100

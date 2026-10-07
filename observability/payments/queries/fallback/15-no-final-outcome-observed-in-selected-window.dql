@@ -1,0 +1,13 @@
+// No final outcome observed in selected window
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| filter isNotNull(payment.transaction_id)
+| summarize finals = countIf(payment.record_kind == "final"), by: {payment.transaction_id}
+| filter finals == 0
+| summarize payments_without_observed_final = count()

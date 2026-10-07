@@ -1,0 +1,26 @@
+// Extraction coverage — settled 2-hour window
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter payment.record_kind == "final" and isNotNull(payment.transaction_id)
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| fields payment.transaction_id, payment.source_timestamp, source = "final_log"
+| append [
+fetch bizevents
+| filter event.type == "demo.payment.completed" and event.provider == "synthetic-payments-demo"
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter isNotNull(payment.transaction_id)
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| fields payment.transaction_id, payment.source_timestamp, source = "business_event"
+]
+| summarize log_records = countIf(source == "final_log"), event_records = countIf(source == "business_event"), by: {payment.transaction_id}
+| summarize final_log_records = sum(log_records), extracted_event_records = sum(event_records), unique_final_log_payments = countIf(log_records > 0), unique_event_payments = countIf(event_records > 0), missing_event_payments = countIf(log_records > 0 and event_records == 0), events_without_log = countIf(event_records > 0 and log_records == 0), duplicate_final_logs = sum(if(log_records > 1, log_records - 1, else: 0)), duplicate_events = sum(if(event_records > 1, event_records - 1, else: 0))

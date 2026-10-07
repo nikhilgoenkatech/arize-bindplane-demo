@@ -1,0 +1,10 @@
+// Transformation quality — settled 2-hour window
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| summarize relevant_logs = count(), recognized_final_logs = countIf(payment.record_kind == "final"), missing_required = countIf(payment.quality.missing_required == true), parse_failures = countIf(payment.quality.parse_failed == true), invalid_values = countIf(payment.quality.invalid_values == true), unrecognized = countIf(payment.quality.unrecognized == true)

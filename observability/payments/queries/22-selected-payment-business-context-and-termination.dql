@@ -1,0 +1,12 @@
+// Selected payment business context and termination
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| filter $TransactionId != "" and payment.transaction_id == $TransactionId
+| summarize final_records = countIf(payment.record_kind == "final"), observed_stages = collectDistinct(payment.stage), rail = takeAny(payment.rail), channel = takeAny(payment.channel), amount_AUD = takeAny(payment.amount), by: {payment.transaction_id}
+| fieldsAdd observation = if(final_records > 0, "Final outcome observed: see completion row below", else: "No final outcome observed in detail window")

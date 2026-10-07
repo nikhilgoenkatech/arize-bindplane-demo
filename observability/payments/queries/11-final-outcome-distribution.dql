@@ -1,0 +1,13 @@
+// Final outcome distribution
+fetch bizevents
+| filter event.type == "demo.payment.completed" and event.provider == "synthetic-payments-demo"
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter isNotNull(payment.transaction_id)
+| dedup payment.transaction_id, sort: {payment.source_timestamp desc, payment.status desc, payment.service desc, payment.total_duration_ms desc, payment.error_code desc, payment.trace_id desc, payment.span_id desc, payment.amount desc, payment.type desc, payment.rail desc, payment.channel desc, payment.customer_segment desc, payment.scenario desc, payment.journey_id desc, payment.currency desc, payment.direction desc, payment.step_sequence desc, payment.risk_score desc, payment.fraud_decision desc, payment.error_message desc}
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| summarize payments = count(), by: {payment.outcome}

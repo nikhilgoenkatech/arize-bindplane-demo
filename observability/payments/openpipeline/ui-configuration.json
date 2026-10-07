@@ -1,0 +1,90 @@
+{
+  "format": "UI configuration checklist, NOT an API import payload",
+  "name": "Synthetic payments v1",
+  "scope": "Logs",
+  "routeName": "Synthetic payments / llm-obs-demo / payments-demo",
+  "routeMatcher": "matchesValue(k8s.namespace.name, \"llm-obs-demo\") and matchesValue(k8s.deployment.name, {\"payments-demo-payment-generator\", \"payments-demo-payment-channel\", \"payments-demo-payment-hub\", \"payments-demo-payment-processor\", \"payments-demo-payment-settlement\"})",
+  "processing": [
+    {
+      "name": "01-mark-and-preserve",
+      "type": "DQL",
+      "matcher": "true",
+      "definitionFile": "01-mark-and-preserve.dql"
+    },
+    {
+      "name": "02-parse-if-needed",
+      "type": "DQL",
+      "matcher": "isNotNull(content) and (isNull(transactionId) or isNull(journeyId) or isNull(paymentType) or isNull(paymentRail) or isNull(channel) or isNull(customerSegment) or isNull(direction) or isNull(currency) or isNull(amount) or isNull(scenario) or isNull(service) or isNull(stage) or isNull(status) or isNull(stepSequence) or isNull(durationMs) or isNull(trace_id) or isNull(span_id) or (stage == \"PAYMENT_COMPLETED\" and (isNull(totalDurationMs) or isNull(eventType))))",
+      "definitionFile": "02-parse-if-needed.dql"
+    },
+    {
+      "name": "03-normalize",
+      "type": "DQL",
+      "matcher": "true",
+      "definitionFile": "03-normalize.dql"
+    },
+    {
+      "name": "04-classify-and-correlate",
+      "type": "DQL",
+      "matcher": "true",
+      "definitionFile": "04-classify-and-correlate.dql"
+    },
+    {
+      "name": "05-quality",
+      "type": "DQL",
+      "matcher": "true",
+      "definitionFile": "05-quality.dql"
+    }
+  ],
+  "businessEvent": {
+    "name": "Extract authoritative payment completion",
+    "matcher": "payment.record_kind == \"final\" and isNotNull(payment.transaction_id)",
+    "eventType": {
+      "mode": "Static string",
+      "value": "demo.payment.completed"
+    },
+    "eventProvider": {
+      "mode": "Static string",
+      "value": "synthetic-payments-demo"
+    },
+    "fieldExtraction": {
+      "mode": "Fields to extract",
+      "fields": [
+        "demo.name",
+        "demo.schema_version",
+        "payment.source_timestamp",
+        "payment.record_kind",
+        "payment.outcome",
+        "payment.settlement_service",
+        "trace.id",
+        "span.id",
+        "payment.quality.missing_required",
+        "payment.quality.invalid_values",
+        "payment.transaction_id",
+        "payment.journey_id",
+        "payment.type",
+        "payment.rail",
+        "payment.channel",
+        "payment.customer_segment",
+        "payment.direction",
+        "payment.currency",
+        "payment.amount",
+        "payment.scenario",
+        "payment.service",
+        "payment.stage",
+        "payment.status",
+        "payment.event_type",
+        "payment.step_sequence",
+        "payment.stage_duration_ms",
+        "payment.total_duration_ms",
+        "payment.risk_score",
+        "payment.fraud_decision",
+        "payment.error_code",
+        "payment.error_message",
+        "payment.trace_id",
+        "payment.span_id"
+      ]
+    }
+  },
+  "storage": "Retain source logs; preserve existing permissions, retention, and storage policy; do not add Drop record or No storage assignment."
+}

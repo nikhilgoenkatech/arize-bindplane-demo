@@ -1,0 +1,158 @@
+[
+  {
+    "file": "2-completed-payments.dql",
+    "purpose": "Completed payments",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "3-successful-payments.dql",
+    "purpose": "Successful payments",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "4-failed-payments.dql",
+    "purpose": "Failed payments",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "5-confirmed-failure-rate-.dql",
+    "purpose": "Confirmed failure rate (%)",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "6-p95-end-to-end-seconds.dql",
+    "purpose": "P95 end-to-end (seconds)",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "7-successful-payment-value-aud.dql",
+    "purpose": "Successful payment value (AUD)",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "8-slow-successful-payments.dql",
+    "purpose": "Slow successful payments",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "9-uncertain-final-outcomes.dql",
+    "purpose": "Uncertain final outcomes",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "10-completed-payment-traffic.dql",
+    "purpose": "Completed payment traffic",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "11-final-outcome-distribution.dql",
+    "purpose": "Final outcome distribution",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "12-payment-mix-by-rail.dql",
+    "purpose": "Payment mix by rail",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "13-payment-mix-by-channel.dql",
+    "purpose": "Payment mix by channel",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "14-payments-with-transport-errors.dql",
+    "purpose": "Payments with transport errors",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "15-no-final-outcome-observed-in-selected-window.dql",
+    "purpose": "No final outcome observed in selected window",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "17-stage-latency-by-service-stage-and-rail.dql",
+    "purpose": "Stage latency by service, stage and rail",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "18-end-to-end-duration-by-rail-and-scenario.dql",
+    "purpose": "End-to-end duration by rail and scenario",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "19-failures-by-error-and-terminating-service.dql",
+    "purpose": "Failures by error and terminating service",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "20-recent-slow-and-failed-payments.dql",
+    "purpose": "Recent slow and failed payments",
+    "source": "fetch bizevents",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "22-selected-payment-business-context-and-termination.dql",
+    "purpose": "Selected payment business context and termination",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "23-selected-authoritative-final-outcome.dql",
+    "purpose": "Selected authoritative final outcome",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "24-selected-journey-ordered-records.dql",
+    "purpose": "Selected journey ordered records",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "25-actual-spans-for-selected-payment--if-ingested.dql",
+    "purpose": "Actual spans for selected payment — if ingested",
+    "source": "fetch spans",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "27-raw-source-log-and-normalized-fields.dql",
+    "purpose": "Raw source log and normalized fields",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "28-extracted-final-business-event-example.dql",
+    "purpose": "Extracted final business-event example",
+    "source": "fetch bizevents",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "29-transformation-quality--settled-2-hour-window.dql",
+    "purpose": "Transformation quality — settled 2-hour window",
+    "source": "fetch logs",
+    "timeframe": "last 2h ending 2m ago"
+  },
+  {
+    "file": "30-extraction-coverage--settled-2-hour-window.dql",
+    "purpose": "Extraction coverage — settled 2-hour window",
+    "source": "fetch logs",
+    "timeframe": "last 2h ending 2m ago"
+  }
+]

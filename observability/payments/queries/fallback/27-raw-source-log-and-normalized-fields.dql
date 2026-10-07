@@ -1,0 +1,13 @@
+// Raw source log and normalized fields
+fetch logs
+| filter demo.name == "synthetic-payments-demo" and demo.schema_version == "1"
+| filter $Rail == "ALL" or payment.rail == $Rail
+| filter $PaymentType == "ALL" or payment.type == $PaymentType
+| filter $Channel == "ALL" or payment.channel == $Channel
+| filter $CustomerSegment == "ALL" or payment.customer_segment == $CustomerSegment
+| filter $Scenario == "ALL" or payment.scenario == $Scenario
+| filter $TransactionId == "" or payment.transaction_id == $TransactionId
+| filter $TransactionId != "" and payment.transaction_id == $TransactionId
+| fields timestamp, raw_content = content, transactionId = payment.transaction_id, journeyId = payment.journey_id, amount = payment.amount, service = payment.service, stage = payment.stage, record_kind = payment.record_kind, outcome = payment.outcome, total_ms = payment.total_duration_ms, schema = demo.schema_version, trace.id
+| sort timestamp asc
+| limit 20

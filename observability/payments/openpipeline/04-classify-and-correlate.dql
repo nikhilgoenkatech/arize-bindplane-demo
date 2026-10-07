@@ -1,0 +1,5 @@
+fieldsAdd payment.record_kind = if(payment.event_type == "PAYMENT_COMPLETED" and payment.stage == "PAYMENT_COMPLETED", "final", else: if(payment.stage == "DELIVERY_ERROR" or payment.status == "UNKNOWN", "transport", else: if(isNotNull(payment.stage), "stage", else: "other")))
+| fieldsAdd payment.settlement_service = if(payment.rail == "NPP", "NPP Settlement", else: if(payment.rail == "BPAY", "BPAY Settlement", else: if(payment.rail == "SWIFT", "SWIFT Gateway", else: if(payment.rail == "INTERNAL", "Internal Ledger", else: "Unmapped"))))
+| fieldsAdd payment.outcome = if(payment.record_kind == "final", if(payment.status == "SUCCESS", "SUCCESS", else: if(payment.status == "FAILED", "FAILED", else: "UNKNOWN")), else: if(payment.record_kind == "transport", "UNKNOWN", else: "NOT_FINAL"))
+| fieldsAdd payment.stage_duration_ms = if(payment.record_kind == "stage" and payment.stage != "PAYMENT_GENERATED", payment.stage_duration_ms, else: null)
+| fieldsAdd trace.id = coalesce(trace.id, toUid(payment.trace_id)), span.id = coalesce(span.id, toUid(payment.span_id))

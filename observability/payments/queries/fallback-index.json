@@ -1,0 +1,158 @@
+[
+  {
+    "file": "fallback/2-completed-payments.dql",
+    "purpose": "Completed payments",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/3-successful-payments.dql",
+    "purpose": "Successful payments",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/4-failed-payments.dql",
+    "purpose": "Failed payments",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/5-confirmed-failure-rate-.dql",
+    "purpose": "Confirmed failure rate (%)",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/6-p95-end-to-end-seconds.dql",
+    "purpose": "P95 end-to-end (seconds)",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/7-successful-payment-value-aud.dql",
+    "purpose": "Successful payment value (AUD)",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/8-slow-successful-payments.dql",
+    "purpose": "Slow successful payments",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/9-uncertain-final-outcomes.dql",
+    "purpose": "Uncertain final outcomes",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/10-completed-payment-traffic.dql",
+    "purpose": "Completed payment traffic",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/11-final-outcome-distribution.dql",
+    "purpose": "Final outcome distribution",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/12-payment-mix-by-rail.dql",
+    "purpose": "Payment mix by rail",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/13-payment-mix-by-channel.dql",
+    "purpose": "Payment mix by channel",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/14-payments-with-transport-errors.dql",
+    "purpose": "Payments with transport errors",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/15-no-final-outcome-observed-in-selected-window.dql",
+    "purpose": "No final outcome observed in selected window",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/17-stage-latency-by-service-stage-and-rail.dql",
+    "purpose": "Stage latency by service, stage and rail",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/18-end-to-end-duration-by-rail-and-scenario.dql",
+    "purpose": "End-to-end duration by rail and scenario",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/19-failures-by-error-and-terminating-service.dql",
+    "purpose": "Failures by error and terminating service",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/20-recent-slow-and-failed-payments.dql",
+    "purpose": "Recent slow and failed payments",
+    "source": "fetch logs",
+    "timeframe": "dashboard timeframe"
+  },
+  {
+    "file": "fallback/22-selected-payment-business-context-and-termination.dql",
+    "purpose": "Selected payment business context and termination",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "fallback/23-selected-authoritative-final-outcome.dql",
+    "purpose": "Selected authoritative final outcome",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "fallback/24-selected-journey-ordered-records.dql",
+    "purpose": "Selected journey ordered records",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "fallback/25-actual-spans-for-selected-payment--if-ingested.dql",
+    "purpose": "Actual spans for selected payment — if ingested",
+    "source": "fetch spans",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "fallback/27-raw-source-log-and-normalized-fields.dql",
+    "purpose": "Raw source log and normalized fields",
+    "source": "fetch logs",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "fallback/28-extracted-final-business-event-example.dql",
+    "purpose": "Extracted final business-event example",
+    "source": "fetch bizevents",
+    "timeframe": "last 24h"
+  },
+  {
+    "file": "fallback/29-transformation-quality--settled-2-hour-window.dql",
+    "purpose": "Transformation quality — settled 2-hour window",
+    "source": "fetch logs",
+    "timeframe": "last 2h ending 2m ago"
+  },
+  {
+    "file": "fallback/30-extraction-coverage--settled-2-hour-window.dql",
+    "purpose": "Extraction coverage — settled 2-hour window",
+    "source": "fetch logs",
+    "timeframe": "last 2h ending 2m ago"
+  }
+]

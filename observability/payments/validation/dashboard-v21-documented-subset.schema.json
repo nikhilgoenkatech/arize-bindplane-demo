@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Locally encoded documented dashboard v21 subset — not the complete vendor schema",
+  "description": "Source: https://docs.dynatrace.com/docs/analyze-explore-automate/dashboards-and-notebooks/document-api/document-structure-dashboards checked 2026-10-07. Native validation remains required.",
+  "type": "object",
+  "required": [
+    "version",
+    "variables",
+    "tiles",
+    "layouts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 21
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version",
+          "key",
+          "type",
+          "visible",
+          "editable"
+        ],
+        "properties": {
+          "version": {
+            "const": 2
+          },
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "csv",
+              "text"
+            ]
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "input": {
+            "type": "string"
+          },
+          "multiple": {
+            "const": false
+          },
+          "defaultValue": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "tiles": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "content"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "const": "markdown"
+              },
+              "content": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "title",
+              "query",
+              "visualization",
+              "visualizationSettings",
+              "querySettings"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "const": "data"
+              },
+              "title": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1
+              },
+              "visualization": {
+                "enum": [
+                  "singleValue",
+                  "table",
+                  "lineChart",
+                  "donutChart",
+                  "categoricalBarChart"
+                ]
+              },
+              "visualizationSettings": {
+                "type": "object"
+              },
+              "querySettings": {
+                "type": "object"
+              },
+              "timeframe": {
+                "type": "object",
+                "required": [
+                  "tileTimeframeEnabled",
+                  "tileTimeframe"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "tileTimeframeEnabled": {
+                    "type": "boolean"
+                  },
+                  "tileTimeframe": {
+                    "type": "object",
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "properties": {
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "layouts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "y": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "w": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "h": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "required": [
+        "defaultTimeframe"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "defaultTimeframe": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "value"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "from",
+                "to"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

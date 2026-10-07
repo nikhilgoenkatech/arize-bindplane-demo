@@ -42,6 +42,7 @@ composer.lock
 /.lycheecache
 /payments-image.local.yaml
 /payments-results-*.jsonl
+/payments-demo-evidence-*.json
 
 # Ignore copied/generated protobuf files
 /src/accounting/src/protos/

@@ -1,0 +1,39 @@
+{
+  "validationDate": "2026-10-07",
+  "testsRun": 13,
+  "failures": 0,
+  "errors": 0,
+  "capturedLogRecords": 46,
+  "capturedPayments": 8,
+  "referenceProjectedBusinessEvents": 8,
+  "observedOutcomes": {
+    "completed": 8,
+    "success": 5,
+    "failed": 3,
+    "uncertain_final": 0,
+    "failure_rate_percent": 37.5,
+    "successful_value_AUD": 309136.38
+  },
+  "coverageExamples": {
+    "normal-PAYID": "PAY-39b3207d2b4342a99c0f8aa82ec6bee9",
+    "normal-BPAY": "PAY-9029776b78d244098a00ac9896638573",
+    "normal-ACCOUNT_TRANSFER": "PAY-c2ff5ee2342f4e83a3e9d4553e4e91bc",
+    "normal-INTERNATIONAL_TRANSFER": "PAY-df22cef9ae0c4933a292ebb4598d0ef4",
+    "slow-success": "PAY-a582a0365b534b9db9bc5b1d15d1916e",
+    "processor-failure": "PAY-97435e379fad46b9b7ebac165ca0a165",
+    "settlement-failure": "PAY-187bc87cd34049e4916fc678c7efb5bf"
+  },
+  "locallyValidated": [
+    "Real local HTTP application run and business stdout",
+    "Documented v21 JSON subset, layouts, query consistency",
+    "Python reference model of counting and transformation contracts"
+  ],
+  "NOTValidated": [
+    "Native full vendor dashboard schema/import/rendering",
+    "DQL execution in Grail",
+    "Actual OpenPipeline transformation and extraction",
+    "Kubernetes incoming log metadata",
+    "Tenant log/event reconciliation",
+    "Actual span ingestion and trace navigation"
+  ]
+}

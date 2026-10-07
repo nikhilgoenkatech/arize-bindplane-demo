@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1",
+  "fields": {
+    "transactionId": {
+      "canonical": "payment.transaction_id",
+      "type": "string"
+    },
+    "journeyId": {
+      "canonical": "payment.journey_id",
+      "type": "string"
+    },
+    "paymentType": {
+      "canonical": "payment.type",
+      "type": "string"
+    },
+    "paymentRail": {
+      "canonical": "payment.rail",
+      "type": "string"
+    },
+    "channel": {
+      "canonical": "payment.channel",
+      "type": "string"
+    },
+    "customerSegment": {
+      "canonical": "payment.customer_segment",
+      "type": "string"
+    },
+    "direction": {
+      "canonical": "payment.direction",
+      "type": "string"
+    },
+    "currency": {
+      "canonical": "payment.currency",
+      "type": "string"
+    },
+    "amount": {
+      "canonical": "payment.amount",
+      "type": "double"
+    },
+    "scenario": {
+      "canonical": "payment.scenario",
+      "type": "string"
+    },
+    "service": {
+      "canonical": "payment.service",
+      "type": "string"
+    },
+    "stage": {
+      "canonical": "payment.stage",
+      "type": "string"
+    },
+    "status": {
+      "canonical": "payment.status",
+      "type": "string"
+    },
+    "eventType": {
+      "canonical": "payment.event_type",
+      "type": "string"
+    },
+    "stepSequence": {
+      "canonical": "payment.step_sequence",
+      "type": "long"
+    },
+    "durationMs": {
+      "canonical": "payment.stage_duration_ms",
+      "type": "double"
+    },
+    "totalDurationMs": {
+      "canonical": "payment.total_duration_ms",
+      "type": "double"
+    },
+    "riskScore": {
+      "canonical": "payment.risk_score",
+      "type": "long"
+    },
+    "fraudDecision": {
+      "canonical": "payment.fraud_decision",
+      "type": "string"
+    },
+    "errorCode": {
+      "canonical": "payment.error_code",
+      "type": "string"
+    },
+    "errorMessage": {
+      "canonical": "payment.error_message",
+      "type": "string"
+    },
+    "trace_id": {
+      "canonical": "payment.trace_id",
+      "type": "string"
+    },
+    "span_id": {
+      "canonical": "payment.span_id",
+      "type": "string"
+    }
+  },
+  "timestamp": {
+    "canonical": "payment.source_timestamp",
+    "type": "normalized timestamp string",
+    "precedence": [
+      "parsed JSON timestamp",
+      "existing timestamp"
+    ],
+    "ingestionTimestampPreserved": true
+  }
+}
