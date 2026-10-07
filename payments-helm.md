@@ -124,6 +124,27 @@ needed. Without `--count`, it prompts for the number of transactions:
 python3 scripts/trigger-payments.py
 ```
 
+The default URL is `http://127.0.0.1:8080`. The script checks `/health` before
+sending any payments and bypasses proxy environment variables for loopback
+requests. If the check fails, it exits without creating a results file or
+submitting payments. This health check validates access to the generator;
+downstream failures can still occur during a run.
+
+If CloudShell was restarted, recreate the port-forward. Run it in the
+background in the **same terminal** that will run the script:
+
+```sh
+kubectl -n llm-obs-demo port-forward --address 127.0.0.1 svc/payments-demo-payment-generator 8080:8080 > /tmp/payments-port-forward.log 2>&1 &
+PAYMENTS_FORWARD_PID=$!
+curl --noproxy '*' --fail --retry 5 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/health
+python3 scripts/trigger-payments.py --count 12
+```
+
+Proceed only when the health response is `{"status":"UP"}`. If the check
+fails, inspect `cat /tmp/payments-port-forward.log`. Stop this background
+forward after the demo with `kill "$PAYMENTS_FORWARD_PID"` in the same shell.
+Using `127.0.0.1` avoids dependence on IPv6 loopback support.
+
 The default `coverage` mix cycles through all four payment types for NORMAL,
 then SLOW_SETTLEMENT, then FAILED_PAYMENT. Twelve requests cover every pair
 once. Smaller counts cover the first pairs; the pattern repeats above twelve.
@@ -154,7 +175,7 @@ in-flight requests (default 5, maximum 50). It slows down if all workers are
 busy and does not catch up with a burst. `burst` keeps that many requests in
 flight without a deliberate interval. Slow settlement still takes 3–8 seconds.
 
-Use `--url http://localhost:8081` if forwarding to a different port. The
+Use `--url http://127.0.0.1:8081` if forwarding to a different port. The
 script prints each transaction ID, outcome, scenario, and client duration,
 then summarizes successes, business failures, and unknown outcomes. It saves
 the full returned events in a new `payments-results-TIMESTAMP.jsonl` file;

@@ -7,7 +7,9 @@ import importlib.util
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
+import os
 from pathlib import Path
+import socket
 import tempfile
 import threading
 import time
@@ -22,6 +24,11 @@ SPEC.loader.exec_module(trigger)
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(json.dumps({'status': getattr(self.server, 'health_status', 'UP')}).encode())
+
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         with self.server.lock:
@@ -129,7 +136,9 @@ class TriggerTest(unittest.TestCase):
 
     def test_prompt_validation_and_existing_output(self):
         with patch('builtins.input', return_value='7'):
-            self.assertEqual(trigger.arguments([]).count, 7)
+            args = trigger.arguments([])
+            self.assertEqual(args.count, 7)
+            self.assertEqual(args.url, 'http://127.0.0.1:8080')
         for argv in (['--count', '0'], ['--count', '2', '--concurrency', '51'],
                      ['--count', '2', '--rate', 'nan'], ['--count', '2', '--url', 'ftp://host']):
             with self.subTest(argv=argv), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
@@ -140,6 +149,32 @@ class TriggerTest(unittest.TestCase):
             trigger.run(args)
         self.assertEqual(args.output.read_text(), 'existing data')
         self.assertEqual(len(self.server.requests), 0)
+
+    def test_unhealthy_generator_sends_no_payments(self):
+        self.server.health_status = 'DOWN'
+        args = self.args()
+        with redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(trigger.run(args), 1)
+        self.assertIn('No payments sent', errors.getvalue())
+        self.assertFalse(args.output.exists())
+        self.assertEqual(len(self.server.requests), 0)
+
+    def test_missing_listener_fails_before_creating_results(self):
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            args = self.args('--url', f'http://127.0.0.1:{sock.getsockname()[1]}', '--timeout', '0.2')
+            with redirect_stderr(io.StringIO()) as errors:
+                self.assertEqual(trigger.run(args), 1)
+        self.assertIn('port-forward', errors.getvalue())
+        self.assertFalse(args.output.exists())
+        self.assertEqual(len(self.server.requests), 0)
+
+    def test_loopback_ignores_proxy_environment(self):
+        with patch.dict(os.environ, {'http_proxy': 'http://127.0.0.1:1', 'HTTP_PROXY': 'http://127.0.0.1:1',
+                                     'no_proxy': '', 'NO_PROXY': ''}):
+            status, records = self.run_script(self.args('--count', '1'))
+        self.assertEqual(status, 0)
+        self.assertEqual(len(records), 1)
 
 
 if __name__ == '__main__':

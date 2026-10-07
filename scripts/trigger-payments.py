@@ -15,7 +15,7 @@ import sys
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener, urlopen
 
 
 TYPES = ('PAYID', 'BPAY', 'ACCOUNT_TRANSFER', 'INTERNATIONAL_TRANSFER')
@@ -39,7 +39,7 @@ def positive_float(value):
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-n', '--count', type=positive_int, help='number of requests; prompts when omitted')
-    parser.add_argument('--url', default='http://localhost:8080', help='generator base URL')
+    parser.add_argument('--url', default='http://127.0.0.1:8080', help='generator base URL (default: http://127.0.0.1:8080)')
     parser.add_argument('--mix', choices=('coverage', 'realistic'), default='coverage',
                         help='coverage cycles through 12 type/scenario pairs; realistic uses generator weights')
     parser.add_argument('--payment-type', type=str.upper, choices=TYPES)
@@ -80,13 +80,36 @@ def payload(index, args):
     return body
 
 
+def open_url(request, timeout):
+    url = request.full_url if isinstance(request, Request) else request
+    if urlparse(url).hostname in ('127.0.0.1', 'localhost', '::1'):
+        return build_opener(ProxyHandler({})).open(request, timeout=timeout)
+    return urlopen(request, timeout=timeout)
+
+
+def check_health(args):
+    url = args.url.rstrip('/') + '/health'
+    try:
+        with open_url(url, min(args.timeout, 5)) as response:
+            if json.load(response) != {'status': 'UP'}:
+                raise ValueError('Expected health response {"status":"UP"}')
+    except (URLError, OSError, ValueError) as error:
+        if isinstance(error, HTTPError):
+            error.close()
+        print(f'Generator health check failed at {url}: {error}', file=sys.stderr)
+        print('No payments sent. Start kubectl port-forward in this same CloudShell environment, '
+              'verify /health, then retry. Use --url http://127.0.0.1:8080 for IPv4 loopback.', file=sys.stderr)
+        return False
+    return True
+
+
 def send(index, body, args):
     record = {'requestIndex': index + 1, 'request': body, 'status': 'UNKNOWN'}
     started = time.monotonic()
     req = Request(args.url.rstrip('/') + '/generate', data=json.dumps(body).encode(),
                   headers={'Content-Type': 'application/json'}, method='POST')
     try:
-        with urlopen(req, timeout=args.timeout) as response:
+        with open_url(req, args.timeout) as response:
             result = json.load(response)
         if (not isinstance(result, dict) or result.get('eventType') != 'PAYMENT_COMPLETED'
                 or result.get('status') not in ('SUCCESS', 'FAILED')
@@ -103,6 +126,8 @@ def send(index, body, args):
 
 
 def run(args):
+    if not check_health(args):
+        return 1
     workers = 1 if args.mode == 'sequential' else args.concurrency
     interval = 60 / args.rate if args.mode == 'paced' else 0
     counts = Counter()
