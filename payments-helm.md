@@ -114,6 +114,64 @@ Health endpoints are available at `/health`. Full scenarios, business fields,
 sample logs, and DQL queries are documented in the
 [application README](https://github.com/nikhilgoenkatech/self-service-/blob/2b450ac/payments-demo/README.md).
 
+## Trigger a chosen number of payments
+
+With port-forward running in another terminal, use the script from this
+repository. It requires only Python 3.9+; no image rebuild or Helm upgrade is
+needed. Without `--count`, it prompts for the number of transactions:
+
+```sh
+python3 scripts/trigger-payments.py
+```
+
+The default `coverage` mix cycles through all four payment types for NORMAL,
+then SLOW_SETTLEMENT, then FAILED_PAYMENT. Twelve requests cover every pair
+once. Smaller counts cover the first pairs; the pattern repeats above twelve.
+
+```sh
+# All 12 payment type/scenario pairs, one request at a time
+python3 scripts/trigger-payments.py --count 12
+
+# Use the generator's configured random weights, targeting 30 requests/minute
+python3 scripts/trigger-payments.py --count 50 --mix realistic --mode paced --rate 30
+
+# Five concurrent requests, continuously replenished until 40 have been sent
+python3 scripts/trigger-payments.py --count 40 --mode burst --concurrency 5
+
+# Force slow PayID payments
+python3 scripts/trigger-payments.py --count 10 --payment-type PAYID --scenario SLOW_SETTLEMENT
+
+# Force international payment failures
+python3 scripts/trigger-payments.py --count 10 --payment-type INTERNATIONAL_TRANSFER --scenario FAILED_PAYMENT
+
+# Normal payments across all four types
+python3 scripts/trigger-payments.py --count 20 --scenario NORMAL
+```
+
+`sequential` waits for each response before sending the next payment. `paced`
+spaces request starts at the requested rate, using up to `--concurrency`
+in-flight requests (default 5, maximum 50). It slows down if all workers are
+busy and does not catch up with a burst. `burst` keeps that many requests in
+flight without a deliberate interval. Slow settlement still takes 3–8 seconds.
+
+Use `--url http://localhost:8081` if forwarding to a different port. The
+script prints each transaction ID, outcome, scenario, and client duration,
+then summarizes successes, business failures, and unknown outcomes. It saves
+the full returned events in a new `payments-results-TIMESTAMP.jsonl` file;
+`--output my-run.jsonl` selects a different new file. Existing files are never
+overwritten. Result lines are written in completion order and include a
+`requestIndex` to reconstruct submission order.
+
+Business failures are expected demo results and do not make the script fail.
+HTTP, connection, timeout, or invalid-response errors are reported as UNKNOWN
+and produce exit code 1; requests are never retried because that could create
+additional transactions. Ctrl+C stops new submissions and waits for in-flight
+requests. The requested count covers only this script's requests; automatic
+generator traffic continues separately. For an exact manual-only demo, set
+`generator.transactionsPerMinute: 0` in your Helm values and upgrade first.
+The API selects channels, amounts, customer segments, and failure locations;
+the script can override payment type and scenario only.
+
 ## Telemetry and configuration
 
 The preset sends OTLP HTTP traces to:

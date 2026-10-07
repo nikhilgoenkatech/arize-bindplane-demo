@@ -41,6 +41,7 @@ composer.lock
 *.apk
 /.lycheecache
 /payments-image.local.yaml
+/payments-results-*.jsonl
 
 # Ignore copied/generated protobuf files
 /src/accounting/src/protos/
