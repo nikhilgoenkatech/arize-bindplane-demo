@@ -1,0 +1,109 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+{{- $services := list
+  (dict "name" "payment-generator" "role" "generator" "next" "payment-channel")
+  (dict "name" "payment-channel" "role" "channel" "next" "payment-hub")
+  (dict "name" "payment-hub" "role" "hub" "next" "payment-processor")
+  (dict "name" "payment-processor" "role" "processor" "next" "payment-settlement")
+  (dict "name" "payment-settlement" "role" "settlement")
+-}}
+{{- $prefix := include "payments-demo.fullname" . -}}
+{{- range $service := $services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $prefix }}-{{ $service.name }}
+  labels:
+    {{- include "payments-demo.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $service.name }}
+spec:
+  replicas: {{ $.Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $service.name }}
+  template:
+    metadata:
+      labels:
+        {{- include "payments-demo.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $service.name }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $service.name }}
+          image: {{ printf "%s:%s" $.Values.image.repository $.Values.image.tag | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: {{ $prefix }}-config
+          env:
+            - name: SERVICE
+              value: {{ $service.role | quote }}
+            - name: PORT
+              value: "8080"
+            {{- with $service.next }}
+            - name: NEXT_SERVICE_URL
+              value: {{ printf "http://%s-%s:8080" $prefix . | quote }}
+            {{- end }}
+            {{- if $.Values.otel.headersSecretName }}
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.otel.headersSecretName }}
+                  key: {{ $.Values.otel.headersSecretKey }}
+            {{- end }}
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $prefix }}-{{ $service.name }}
+  labels:
+    {{- include "payments-demo.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $service.name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $service.name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- end }}

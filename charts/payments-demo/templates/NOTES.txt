@@ -1,0 +1,9 @@
+Payments are generated at {{ .Values.generator.transactionsPerMinute }} transactions/minute per generator replica.
+
+Access the generator:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "payments-demo.fullname" . }}-payment-generator 8080:8080
+
+Check all five services:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+See payments-helm.md for image build, demo requests, log collection, and upgrades.

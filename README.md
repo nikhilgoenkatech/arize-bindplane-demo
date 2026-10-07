@@ -49,6 +49,9 @@ your preferred deployment method:
 
 ## Documentation
 
+For the standalone synthetic payments demo using the existing collector, see
+[Payments Helm deployment](payments-helm.md).
+
 For detailed documentation, see [Demo Documentation][docs]. If you're curious
 about a specific feature, the [docs landing page][docs] can point you in the
 right direction.

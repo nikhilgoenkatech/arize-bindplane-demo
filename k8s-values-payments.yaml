@@ -1,0 +1,15 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Values for ./charts/payments-demo, a separate Helm release.
+# Build and supply your registry image as described in payments-helm.md.
+image:
+  repository: payments-demo
+  tag: local
+  pullPolicy: IfNotPresent
+generator:
+  transactionsPerMinute: 10
+  paymentTypeWeights: "40,25,25,10"
+  scenarioWeights: "95,3,2"
+otel:
+  endpoint: http://otel-collector.llm-obs-demo.svc.cluster.local:4318

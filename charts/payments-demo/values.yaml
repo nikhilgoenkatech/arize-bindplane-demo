@@ -1,0 +1,24 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+image:
+  repository: payments-demo
+  tag: local
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+replicaCount: 1
+generator:
+  transactionsPerMinute: 10
+  paymentTypeWeights: "40,25,25,10"
+  scenarioWeights: "95,3,2"
+otel:
+  endpoint: ""
+  headersSecretName: ""
+  headersSecretKey: headers
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 192Mi

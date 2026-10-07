@@ -1,0 +1,9 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: payments-demo
+description: Five lightweight synthetic payment services with business and trace correlation
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

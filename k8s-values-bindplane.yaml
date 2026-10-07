@@ -20,6 +20,9 @@
 #      helm repo update
 #      helm upgrade --install otel-demo open-telemetry/opentelemetry-demo \
 #        -f k8s-values-bindplane.yaml -n llm-obs-demo
+#
+# Synthetic payments use a separate release: ./charts/payments-demo with
+# k8s-values-payments.yaml. See payments-helm.md for build and upgrade commands.
 
 # =============================================================================
 # Disable bundled observability — Dynatrace (via BindPlane) replaces these
