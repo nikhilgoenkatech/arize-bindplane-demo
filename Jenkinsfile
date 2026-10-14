@@ -250,6 +250,7 @@ with open('/tmp/demo.flagd.json', 'w') as f:
 
                     RELEASE_VERSION="${RELEASE_ID}" \
                     AGENT_SERVICE_NAME=agent \
+                    DT_ENV_URL="${DT_ENV_URL}" \
                     DT_AUTH_SCHEME=Bearer \
                     python3 arize/arize-experiment.py
                 '''
