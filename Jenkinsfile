@@ -463,7 +463,7 @@ String getAccessToken() {
     print("Getting OAuth2 token")
     final String tokenResponse = sh(script: '''
         set +x
-        curl -sLX POST "https://sso-sprint.dynatracelabs.com/sso/oauth2/token" \
+        curl -sLX POST "https://sso.dynatrace.com/sso/oauth2/token" \
             --header "Content-Type: application/x-www-form-urlencoded" \
             --data-urlencode "grant_type=client_credentials" \
             --data-urlencode "client_id=dt0s02.YWKRGOXC" \
@@ -472,5 +472,9 @@ String getAccessToken() {
             --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write storage:events:read openpipeline:events.sdlc:ingest"
         set -x
     ''', returnStdout: true).trim()
-    return readJSON(text: tokenResponse).access_token
+    def parsed = readJSON(text: tokenResponse)
+    if (!parsed.access_token) {
+        error("getAccessToken() failed — response: ${tokenResponse}")
+    }
+    return parsed.access_token
 }
