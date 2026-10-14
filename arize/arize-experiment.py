@@ -354,8 +354,15 @@ def send_bizevent(event: dict) -> None:
         print("\n[skip] DT_ENV_URL / DT_API_TOKEN not set — skipping Dynatrace bizevent.")
         return
 
+    url = f"{DT_ENV_URL.rstrip('/')}/api/v2/bizevents/ingest"
+    token_preview = DT_API_TOKEN[:8] + "..." if DT_API_TOKEN else "(none)"
+    print(f"\n[bizevent] POST {url}")
+    print(f"[bizevent] Auth scheme : {DT_AUTH_SCHEME}")
+    print(f"[bizevent] Token prefix: {token_preview}")
+    print(f"[bizevent] Payload     : {json.dumps(event, indent=2)}")
+
     resp = requests.post(
-        f"{DT_ENV_URL.rstrip('/')}/api/v2/bizevents/ingest",
+        url,
         json=event,
         headers={
             "Authorization": f"{DT_AUTH_SCHEME} {DT_API_TOKEN}",
@@ -363,8 +370,11 @@ def send_bizevent(event: dict) -> None:
         },
         timeout=10,
     )
+    print(f"[bizevent] Response    : HTTP {resp.status_code}")
+    if resp.text:
+        print(f"[bizevent] Body        : {resp.text[:500]}")
     resp.raise_for_status()
-    print(f"\nSent bizevent to Dynatrace: eval.overall.passed={event['eval.overall.passed']}")
+    print(f"[bizevent] OK — eval.overall.passed={event['eval.overall.passed']}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
