@@ -47,10 +47,10 @@ pipeline {
 
         // Same OAuth2 client-credentials app + same Dynatrace tenant already
         // used by the easytrade pipeline's getAccessToken()/ingestBizEvents().
-        PLATFORM_CLIENT        = credentials('client_id')
-        PLATFORM_CLIENT_SECRET = credentials('client_secret')
-        PLATFORM_CLIENT_URN    = credentials('client_urn')
-        DT_ENV_URL             = 'https://ykd61701.sprint.dynatracelabs.com'
+        PLATFORM_CLIENT        = "dt0s02.YWKRGOXC"//credentials('vkt_client_id')
+        PLATFORM_CLIENT_SECRET = credentials('vkt_client_secret')
+        PLATFORM_CLIENT_URN    = credentials('vkt_client_urn')
+        DT_ENV_URL             = 'https://vkt82601.apps.dynatrace.com/'
 
         // How long to wait before the guardian's evaluation could possibly be done,
         // and how often to re-check after that. Tune once you know how long your
@@ -250,7 +250,6 @@ with open('/tmp/demo.flagd.json', 'w') as f:
 
                     RELEASE_VERSION="${RELEASE_ID}" \
                     AGENT_SERVICE_NAME=agent \
-                    DT_ENV_URL="${DT_ENV_URL}" \
                     DT_AUTH_SCHEME=Bearer \
                     python3 arize/arize-experiment.py
                 '''
@@ -467,7 +466,7 @@ String getAccessToken() {
         curl -sLX POST "https://sso-sprint.dynatracelabs.com/sso/oauth2/token" \
             --header "Content-Type: application/x-www-form-urlencoded" \
             --data-urlencode "grant_type=client_credentials" \
-            --data-urlencode "client_id=${PLATFORM_CLIENT}" \
+            --data-urlencode "client_id=dt0s02.YWKRGOXC" \
             --data-urlencode "client_secret=${PLATFORM_CLIENT_SECRET}" \
             --data-urlencode "resource=urn:dtaccount:${PLATFORM_CLIENT_URN}" \
             --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write storage:events:read openpipeline:events.sdlc:ingest"
