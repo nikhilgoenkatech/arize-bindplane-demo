@@ -50,7 +50,8 @@ pipeline {
         PLATFORM_CLIENT        = "dt0s02.YWKRGOXC"//credentials('vkt_client_id')
         PLATFORM_CLIENT_SECRET = credentials('vkt_client_secret')
         PLATFORM_CLIENT_URN    = credentials('vkt_client_urn')
-        DT_ENV_URL             = 'https://vkt82601.apps.dynatrace.com/'
+        DT_ENV_URL             = 'https://vkt82601.apps.dynatrace.com'   // platform API (/platform/...)
+        DT_CLASSIC_URL         = 'https://vkt82601.live.dynatrace.com'   // classic API  (/api/v2/...)
 
         // How long to wait before the guardian's evaluation could possibly be done,
         // and how often to re-check after that. Tune once you know how long your
@@ -250,6 +251,7 @@ with open('/tmp/demo.flagd.json', 'w') as f:
 
                     RELEASE_VERSION="${RELEASE_ID}" \
                     AGENT_SERVICE_NAME=agent \
+                    DT_ENV_URL="${DT_CLASSIC_URL}" \
                     DT_AUTH_SCHEME=Bearer \
                     python3 arize/arize-experiment.py
                 '''
@@ -397,7 +399,7 @@ void triggerGuardianValidation() {
     withEnv(["TRIGGER_TOKEN=${token}", "TRIGGER_BODY=${body}"]) {
         sh '''
             set +x
-            curl -sS -X POST "${DT_ENV_URL}/api/v2/bizevents/ingest" \
+            curl -sS -X POST "${DT_CLASSIC_URL}/api/v2/bizevents/ingest" \
                 -H "Authorization: Bearer ${TRIGGER_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "${TRIGGER_BODY}"
