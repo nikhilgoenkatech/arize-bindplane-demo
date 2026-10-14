@@ -52,6 +52,7 @@ pipeline {
         PLATFORM_CLIENT_URN    = credentials('vkt_client_urn')
         DT_ENV_URL             = 'https://vkt82601.apps.dynatrace.com'   // platform API (/platform/...)
         DT_CLASSIC_URL         = 'https://vkt82601.live.dynatrace.com'   // classic API  (/api/v2/...)
+        DT_API_TOKEN           = credentials('vkt_dt_api_token')          // classic DT API token for /api/v2/bizevents/ingest
 
         // How long to wait before the guardian's evaluation could possibly be done,
         // and how often to re-check after that. Tune once you know how long your
@@ -241,10 +242,6 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     sh 'JENKINS_NODE_COOKIE=dontKillMe bash arize/port-forward.sh'
                 }
 
-                script {
-                    env.DT_API_TOKEN = getAccessToken()
-                }
-
                 sh '''
                     python3 -m pip install --no-cache-dir --break-system-packages -r arize/requirements.txt
                     python3 arize/arize-dataset.py
@@ -252,7 +249,7 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     RELEASE_VERSION="${RELEASE_ID}" \
                     AGENT_SERVICE_NAME=agent \
                     DT_ENV_URL="${DT_CLASSIC_URL}" \
-                    DT_AUTH_SCHEME=Bearer \
+                    DT_AUTH_SCHEME=Api-Token \
                     python3 arize/arize-experiment.py
                 '''
             }
