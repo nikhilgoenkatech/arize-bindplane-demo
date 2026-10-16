@@ -368,7 +368,7 @@ void sendSdlcEvent(Map fields) {
     withEnv(["SDLC_TOKEN=${token}", "SDLC_BODY=${body}"]) {
         sh '''
             set +x
-            curl -sS -X POST "${DT_ENV_URL}/platform/ingest/v1/events.sdlc" \
+            curl -sS -X POST "${DT_CLASSIC_URL}/platform/ingest/v1/events.sdlc" \
                 -H "Authorization: Bearer ${SDLC_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "${SDLC_BODY}"
