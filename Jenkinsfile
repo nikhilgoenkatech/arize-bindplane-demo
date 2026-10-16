@@ -460,6 +460,14 @@ String pollForGuardianResult() {
 // bizevents usage.
 String getAccessToken() {
     print("Getting OAuth2 token")
+    // Debug: print what we're sending (secret stays masked by Jenkins)
+    sh(script: '''
+        set +x
+        echo "[oauth] SSO endpoint : https://sso.dynatrace.com/sso/oauth2/token"
+        echo "[oauth] client_id    : ${PLATFORM_CLIENT}"
+        echo "[oauth] client_secret: (masked)"
+        set -x
+    ''')
     final String tokenResponse = sh(script: '''
         set +x
         curl -sLX POST "https://sso.dynatrace.com/sso/oauth2/token" \
@@ -470,6 +478,7 @@ String getAccessToken() {
             --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write storage:events:read openpipeline:events.sdlc:ingest"
         set -x
     ''', returnStdout: true).trim()
+    echo("[oauth] Raw response: ${tokenResponse}")
     def parsed = readJSON(text: tokenResponse)
     if (!parsed.access_token) {
         error("getAccessToken() failed — response: ${tokenResponse}")
