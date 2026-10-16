@@ -463,14 +463,15 @@ String getAccessToken() {
     // Debug: print what we're sending (secret stays masked by Jenkins)
     sh(script: '''
         set +x
-        echo "[oauth] SSO endpoint : https://sso.dynatrace.com/sso/oauth2/token"
-        echo "[oauth] client_id    : ${PLATFORM_CLIENT}"
-        echo "[oauth] client_secret: (masked)"
+        echo "[oauth] SSO endpoint   : https://sso.dynatrace.com/sso/oauth2/token"
+        echo "[oauth] client_id      : ${PLATFORM_CLIENT}"
+        echo "[oauth] client_secret  : (masked)"
+        echo "[oauth] client_urn     : ${PLATFORM_CLIENT_URN}"
         set -x
     ''')
     final String tokenResponse = sh(script: '''
         set +x
-        curl -sLX POST "https://sso.dynatrace.com/sso/oauth2/token" \
+        curl -vLX POST "https://sso.dynatrace.com/sso/oauth2/token" \
             --header "Content-Type: application/x-www-form-urlencoded" \
             --data-urlencode "grant_type=client_credentials" \
             --data-urlencode "client_id=${PLATFORM_CLIENT}" \
