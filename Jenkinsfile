@@ -475,6 +475,7 @@ String getAccessToken() {
             --data-urlencode "grant_type=client_credentials" \
             --data-urlencode "client_id=${PLATFORM_CLIENT}" \
             --data-urlencode "client_secret=${PLATFORM_CLIENT_SECRET}" \
+            --data-urlencode "resource=urn:dtaccount:${PLATFORM_CLIENT_URN}" \
             --data-urlencode "scope=storage:buckets:read storage:bizevents:read storage:events:write storage:events:read openpipeline:events.sdlc:ingest"
         set -x
     ''', returnStdout: true).trim()
