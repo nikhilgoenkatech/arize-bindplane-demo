@@ -47,7 +47,7 @@ pipeline {
 
         // Same OAuth2 client-credentials app + same Dynatrace tenant already
         // used by the easytrade pipeline's getAccessToken()/ingestBizEvents().
-        PLATFORM_CLIENT        = "dt0s02.YWKRGOXC"//credentials('vkt_client_id')
+        PLATFORM_CLIENT        = credentials('vkt_client_id')
         PLATFORM_CLIENT_SECRET = credentials('vkt_client_secret')
         PLATFORM_CLIENT_URN    = credentials('vkt_client_urn')
         DT_ENV_URL             = 'https://vkt82601.apps.dynatrace.com'   // platform API (/platform/...)
