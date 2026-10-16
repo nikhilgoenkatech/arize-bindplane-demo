@@ -54,13 +54,6 @@ pipeline {
         DT_CLASSIC_URL         = 'https://vkt82601.live.dynatrace.com'   // classic API  (/api/v2/...)
         DT_API_TOKEN           = credentials('vkt_dt_api_token')          // classic DT API token for /api/v2/bizevents/ingest
 
-        // How long to wait before the guardian's evaluation could possibly be done,
-        // and how often to re-check after that. Tune once you know how long your
-        // guardian's own objectives actually take to evaluate.
-        SRG_INITIAL_DELAY_SECONDS = '60'
-        SRG_POLL_INTERVAL_SECONDS = '30'
-        SRG_MAX_POLL_ATTEMPTS     = '10'
-
         OPENAI_API_KEY = credentials('openai-api-key')
     }
 
@@ -302,26 +295,36 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                         'task.name': 'Release Gate (SRG Approval)',
                     ])
 
-                    triggerGuardianValidation()
-                    def verdict = pollForGuardianResult()
-                    echo "Guardian verdict for release ${env.RELEASE_ID}: ${verdict}"
+                    // Each build gets a unique input ID so concurrent pipeline
+                    // runs each wait independently — Dynatrace targets the right
+                    // build via the proceedUrl / abortUrl in the trigger bizevent.
+                    def inputId = "srg-${env.BUILD_ID}"
+                    triggerGuardianValidation(inputId)
 
-                    if (verdict != 'pass') {
+                    try {
+                        // Pipeline blocks here. Dynatrace workflow calls:
+                        //   proceedUrl → pipeline continues to Production
+                        //   abortUrl   → pipeline fails here (caught below)
+                        input(
+                            id: inputId,
+                            message: "Waiting for Dynatrace SRG verdict on release ${env.RELEASE_ID}",
+                            ok: 'Proceed to Production',
+                        )
+                        sendSdlcEvent([
+                            'event.type': 'validation',
+                            'event.status': 'finished',
+                            'task.name': 'Release Gate (SRG Approval)',
+                            'task.outcome': 'Success',
+                        ])
+                    } catch (err) {
                         sendSdlcEvent([
                             'event.type': 'validation',
                             'event.status': 'finished',
                             'task.name': 'Release Gate (SRG Approval)',
                             'task.outcome': 'Failure',
                         ])
-                        error("Dynatrace Site Reliability Guardian did not approve release ${env.RELEASE_ID} (verdict: ${verdict})")
+                        error("Dynatrace SRG did not approve release ${env.RELEASE_ID}: ${err.message}")
                     }
-
-                    sendSdlcEvent([
-                        'event.type': 'validation',
-                        'event.status': 'finished',
-                        'task.name': 'Release Gate (SRG Approval)',
-                        'task.outcome': 'Success',
-                    ])
                 }
             }
         }
@@ -390,19 +393,34 @@ void sendSdlcEvent(Map fields) {
     }
 }
 
-// Fires the bizevent that triggers the Dynatrace workflow/guardian configured
-// on the Dynatrace side (that workflow config is out of scope here). Contract:
-// event.type == "guardian.validation.triggered", correlated on release.version
-// with both the arize-experiment.py bizevent and the result event the workflow
-// is expected to emit back (event.type == "guardian.validation.result",
-// same release.version, a "result" field of "pass"/"fail").
-void triggerGuardianValidation() {
+// Fires the bizevent that triggers the Dynatrace workflow/guardian.
+// Includes the Jenkins input callback URLs so the Dynatrace workflow knows
+// exactly which build to approve or abort — critical when multiple pipeline
+// runs are waiting simultaneously (each has a unique inputId via BUILD_ID).
+//
+// Dynatrace workflow contract:
+//   On guardian pass → POST proceedUrl  (no body required)
+//   On guardian fail → POST abortUrl    (no body required)
+//
+// Both URLs require a Jenkins user/token with Job/Build permission.
+void triggerGuardianValidation(String inputId) {
+    def proceedUrl = "${env.BUILD_URL}input/${inputId}/proceedEmpty"
+    def abortUrl   = "${env.BUILD_URL}input/${inputId}/abort"
+    echo "SRG gate input id : ${inputId}"
+    echo "  Proceed URL : ${proceedUrl}"
+    echo "  Abort URL   : ${abortUrl}"
+
     def payload = [
-        'event.type'      : 'guardian.validation.triggered',
-        'event.provider'  : 'jenkins',
-        'service'         : 'astronomy-shop-agent',
-        'stage'           : 'staging',
-        'release.version' : env.RELEASE_ID,
+        'event.type'         : 'guardian.validation.triggered',
+        'event.provider'     : 'jenkins',
+        'service'            : 'astronomy-shop-agent',
+        'stage'              : 'staging',
+        'release.version'    : env.RELEASE_ID,
+        'jenkins.job'        : env.JOB_NAME,
+        'jenkins.build'      : env.BUILD_ID,
+        'jenkins.input.id'   : inputId,
+        'jenkins.proceed.url': proceedUrl,
+        'jenkins.abort.url'  : abortUrl,
     ]
     def token = getAccessToken()
     def body = writeJSON(json: payload, returnText: true)
@@ -418,59 +436,9 @@ void triggerGuardianValidation() {
     }
 }
 
-// Polls Grail via DQL for the guardian's result event (see triggerGuardianValidation
-// for the expected contract) until found or SRG_MAX_POLL_ATTEMPTS is exhausted.
-// Returns "pass", "fail", or "timeout". Waits SRG_INITIAL_DELAY_SECONDS before the
-// first check (the guardian can't possibly be done before its own evaluation
-// window elapses, so there's no point checking sooner), then re-checks every
-// SRG_POLL_INTERVAL_SECONDS.
-String pollForGuardianResult() {
-    int initialDelay = (env.SRG_INITIAL_DELAY_SECONDS ?: '60') as int
-    int pollInterval = (env.SRG_POLL_INTERVAL_SECONDS ?: '30') as int
-    int maxAttempts = (env.SRG_MAX_POLL_ATTEMPTS ?: '10') as int
-
-    echo "Waiting ${initialDelay}s before checking for a guardian result..."
-    sleep(time: initialDelay, unit: 'SECONDS')
-
-    def dql = "fetch bizevents | filter event.type == \"guardian.validation.result\" and " +
-        "`release.version` == \"${env.RELEASE_ID}\" | limit 1"
-
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-        def token = getAccessToken()
-        def queryBody = writeJSON(json: ['query': dql], returnText: true)
-        String response
-        withEnv(["POLL_TOKEN=${token}", "POLL_BODY=${queryBody}"]) {
-            response = sh(script: '''
-                set +x
-                curl -sS -X POST "${DT_ENV_URL}/platform/storage/query/v1/query:execute" \
-                    -H "Authorization: Bearer ${POLL_TOKEN}" \
-                    -H "Content-Type: application/json" \
-                    -d "${POLL_BODY}"
-                set -x
-            ''', returnStdout: true).trim()
-        }
-
-        def parsed = readJSON(text: response)
-        def records = parsed?.result?.records
-        if (records && records.size() > 0) {
-            return records[0]['result']
-        }
-
-        echo "Guardian result not yet available (attempt ${attempt}/${maxAttempts})"
-        if (attempt < maxAttempts) {
-            sleep(time: pollInterval, unit: 'SECONDS')
-        }
-    }
-    return 'timeout'
-}
-
 // Copied verbatim from the easytrade pipeline — same OAuth2 client-credentials
-// exchange, same SSO endpoint. Do not fork this per-app; if the endpoint ever
-// changes it should change for both pipelines at once. Scope was widened here
-// (openpipeline:events.sdlc:ingest, storage:events:read added) to cover
-// sendSdlcEvent's and pollForGuardianResult's needs on top of the original
-// bizevents scope — that's additive, not a behavior change for the existing
-// bizevents usage.
+// exchange, same SSO endpoint. Scope extended with openpipeline:events.sdlc:ingest
+// for sendSdlcEvent on top of the original bizevents scope.
 String getAccessToken() {
     print("Getting OAuth2 token")
     // Debug: print what we're sending (secret stays masked by Jenkins)
