@@ -240,18 +240,31 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     // The AWS creds only need to be present at launch — kubectl's exec-plugin
                     // caches/refreshes tokens from the env this backgrounded process already has.
                     sh 'JENKINS_NODE_COOKIE=dontKillMe bash arize/port-forward.sh'
+
+                    // Wait for Phoenix to actually accept connections before running evals.
+                    sh '''
+                        echo "Waiting for Phoenix on localhost:6006..."
+                        for i in $(seq 1 15); do
+                            if curl -sf http://localhost:6006/healthz > /dev/null 2>&1; then
+                                echo "Phoenix ready."
+                                break
+                            fi
+                            echo "  attempt $i/15 — retrying in 2s..."
+                            sleep 2
+                        done
+                    '''
+
+                    sh '''
+                        python3 -m pip install --no-cache-dir --break-system-packages -r arize/requirements.txt
+                        python3 arize/arize-dataset.py
+
+                        RELEASE_VERSION="${RELEASE_ID}" \
+                        AGENT_SERVICE_NAME=agent \
+                        DT_ENV_URL="${DT_CLASSIC_URL}" \
+                        DT_AUTH_SCHEME=Api-Token \
+                        python3 arize/arize-experiment.py
+                    '''
                 }
-
-                sh '''
-                    python3 -m pip install --no-cache-dir --break-system-packages -r arize/requirements.txt
-                    python3 arize/arize-dataset.py
-
-                    RELEASE_VERSION="${RELEASE_ID}" \
-                    AGENT_SERVICE_NAME=agent \
-                    DT_ENV_URL="${DT_CLASSIC_URL}" \
-                    DT_AUTH_SCHEME=Api-Token \
-                    python3 arize/arize-experiment.py
-                '''
             }
             post {
                 always {
