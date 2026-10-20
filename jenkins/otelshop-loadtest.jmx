@@ -45,7 +45,6 @@
       </ThreadGroup>
       <hashTree>
 
-        <!-- X-Release-Version header on every request -->
         <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Common Headers" enabled="true">
           <collectionProp name="HeaderManager.headers">
             <elementProp name="" elementType="Header">
@@ -60,7 +59,7 @@
         </HeaderManager>
         <hashTree/>
 
-        <!-- Homepage: full URL in path so no HTTP Defaults regex needed -->
+        <!-- Homepage -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments"/>
@@ -85,7 +84,7 @@
           <hashTree/>
         </hashTree>
 
-        <!-- Product listing — extract first product ID for subsequent calls -->
+        <!-- Product listing — extract first product ID via built-in JSONPostProcessor -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /api/products" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments"/>
@@ -104,11 +103,12 @@
             <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
           </ResponseAssertion>
           <hashTree/>
-          <JSONPathExtractor guiclass="JSONPathExtractorGui" testclass="JSONPathExtractor" testname="Extract Product ID" enabled="true">
-            <stringProp name="JSONPathExtractor.referenceName">PRODUCT_ID</stringProp>
-            <stringProp name="JSONPathExtractor.jsonPathExpr">$.products[0].id</stringProp>
-            <stringProp name="JSONPathExtractor.defaultValue">NOTFOUND</stringProp>
-          </JSONPathExtractor>
+          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract Product ID" enabled="true">
+            <stringProp name="JSONPostProcessor.referenceNames">PRODUCT_ID</stringProp>
+            <stringProp name="JSONPostProcessor.jsonPathExprs">$.products[0].id</stringProp>
+            <stringProp name="JSONPostProcessor.match_nos">1</stringProp>
+            <stringProp name="JSONPostProcessor.defaultValues">NOTFOUND</stringProp>
+          </JSONPostProcessor>
           <hashTree/>
           <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think 1s" enabled="true">
             <stringProp name="ConstantTimer.delay">1000</stringProp>
