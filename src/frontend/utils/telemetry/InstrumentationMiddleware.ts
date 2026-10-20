@@ -11,10 +11,23 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import logger from './logger';
 
+const LOAD_TEST_HEADERS: Record<string, string> = {
+  'x-load-test-id'      : 'load_test.id',
+  'x-load-test-scenario': 'load_test.scenario',
+  'x-load-test-tool'    : 'load_test.tool',
+  'x-load-test-vusers'  : 'load_test.vusers',
+  'x-release-version'   : 'release.version',
+};
+
 const InstrumentationMiddleware = (handler: NextApiHandler): NextApiHandler => {
   return async (request, response) => {
     const span = trace.getSpan(context.active()) as Span;
     const urlPath = request.url?.split('?', 1)[0];
+
+    for (const [header, attrKey] of Object.entries(LOAD_TEST_HEADERS)) {
+      const value = request.headers[header];
+      if (value) span.setAttribute(attrKey, value as string);
+    }
 
     let httpStatus = 200;
     try {
