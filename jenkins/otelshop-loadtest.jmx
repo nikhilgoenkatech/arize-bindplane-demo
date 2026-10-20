@@ -2,8 +2,6 @@
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6">
   <hashTree>
     <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="OtelShop Load Test" enabled="true">
-      <stringProp name="TestPlan.comments">Drives synthetic load against the OtelShop frontend-proxy.
-BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Jenkins pipeline.</stringProp>
       <boolProp name="TestPlan.functional_mode">false</boolProp>
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
       <elementProp name="TestPlan.arguments" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" enabled="true">
@@ -47,42 +45,30 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
       </ThreadGroup>
       <hashTree>
 
-        <!-- Common headers sent on every request -->
+        <!-- X-Release-Version header on every request -->
         <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Common Headers" enabled="true">
           <collectionProp name="HeaderManager.headers">
-            <elementProp name="X-Release-Version" elementType="Header">
+            <elementProp name="" elementType="Header">
               <stringProp name="Header.name">X-Release-Version</stringProp>
               <stringProp name="Header.value">${RELEASE_VERSION}</stringProp>
             </elementProp>
-            <elementProp name="User-Agent" elementType="Header">
+            <elementProp name="" elementType="Header">
               <stringProp name="Header.name">User-Agent</stringProp>
-              <stringProp name="Header.value">JMeter-OtelShop-LoadTest/${RELEASE_VERSION}</stringProp>
+              <stringProp name="Header.value">JMeter-OtelShop/${RELEASE_VERSION}</stringProp>
             </elementProp>
           </collectionProp>
         </HeaderManager>
         <hashTree/>
 
-        <!-- Extract protocol, host, port from BASE_URL -->
-        <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Defaults" enabled="true">
-          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
-            <collectionProp name="Arguments.arguments"/>
-          </elementProp>
-          <stringProp name="HTTPSampler.domain">${__regexFunction(${BASE_URL},https?://([^:/]+).*,$1$)}</stringProp>
-          <stringProp name="HTTPSampler.port">${__regexFunction(${BASE_URL},.*:(\d+).*,$1$,8080)}</stringProp>
-          <stringProp name="HTTPSampler.protocol">${__regexFunction(${BASE_URL},(https?)://.*,$1$,http)}</stringProp>
-          <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
-          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
-          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
-        </ConfigTestElement>
-        <hashTree/>
-
-        <!-- Homepage -->
+        <!-- Homepage: full URL in path so no HTTP Defaults regex needed -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.path">/</stringProp>
+          <stringProp name="HTTPSampler.path">${BASE_URL}/</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
           <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200" enabled="true">
@@ -93,25 +79,21 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
             <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
           </ResponseAssertion>
           <hashTree/>
-        </hashTree>
-
-        <GenericSampler guiclass="GenericSamplerUI" testclass="GenericSampler" testname="Think Time 1s" enabled="true">
-          <stringProp name="GenericSampler.requestData"/>
-        </GenericSampler>
-        <hashTree>
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="1s pause" enabled="true">
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think 1s" enabled="true">
             <stringProp name="ConstantTimer.delay">1000</stringProp>
           </ConstantTimer>
           <hashTree/>
         </hashTree>
 
-        <!-- Product listing -->
+        <!-- Product listing — extract first product ID for subsequent calls -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /api/products" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.path">/api/products</stringProp>
+          <stringProp name="HTTPSampler.path">${BASE_URL}/api/products</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
           <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200" enabled="true">
@@ -122,12 +104,15 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
             <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
           </ResponseAssertion>
           <hashTree/>
-          <!-- Extract a product ID from the response for the next request -->
           <JSONPathExtractor guiclass="JSONPathExtractorGui" testclass="JSONPathExtractor" testname="Extract Product ID" enabled="true">
             <stringProp name="JSONPathExtractor.referenceName">PRODUCT_ID</stringProp>
             <stringProp name="JSONPathExtractor.jsonPathExpr">$.products[0].id</stringProp>
             <stringProp name="JSONPathExtractor.defaultValue">NOTFOUND</stringProp>
           </JSONPathExtractor>
+          <hashTree/>
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think 1s" enabled="true">
+            <stringProp name="ConstantTimer.delay">1000</stringProp>
+          </ConstantTimer>
           <hashTree/>
         </hashTree>
 
@@ -136,16 +121,13 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.path">/api/products/${PRODUCT_ID}</stringProp>
+          <stringProp name="HTTPSampler.path">${BASE_URL}/api/products/${PRODUCT_ID}</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
-        <hashTree/>
-
-        <GenericSampler guiclass="GenericSamplerUI" testclass="GenericSampler" testname="Think Time 1s" enabled="true">
-          <stringProp name="GenericSampler.requestData"/>
-        </GenericSampler>
         <hashTree>
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="1s pause" enabled="true">
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think 1s" enabled="true">
             <stringProp name="ConstantTimer.delay">1000</stringProp>
           </ConstantTimer>
           <hashTree/>
@@ -156,16 +138,23 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.path">/api/cart</stringProp>
+          <stringProp name="HTTPSampler.path">${BASE_URL}/api/cart</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
-        <hashTree/>
+        <hashTree>
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think 1s" enabled="true">
+            <stringProp name="ConstantTimer.delay">1000</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+        </hashTree>
 
         <!-- Recommendations -->
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /api/recommendations" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" enabled="true">
             <collectionProp name="Arguments.arguments">
-              <elementProp name="productIds" elementType="HTTPArgument">
+              <elementProp name="" elementType="HTTPArgument">
                 <boolProp name="HTTPArgument.always_encode">true</boolProp>
                 <stringProp name="Argument.name">productIds</stringProp>
                 <stringProp name="Argument.value">${PRODUCT_ID}</stringProp>
@@ -173,16 +162,13 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
               </elementProp>
             </collectionProp>
           </elementProp>
-          <stringProp name="HTTPSampler.path">/api/recommendations</stringProp>
+          <stringProp name="HTTPSampler.path">${BASE_URL}/api/recommendations</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
-        <hashTree/>
-
-        <GenericSampler guiclass="GenericSamplerUI" testclass="GenericSampler" testname="Think Time 2s" enabled="true">
-          <stringProp name="GenericSampler.requestData"/>
-        </GenericSampler>
         <hashTree>
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="2s pause" enabled="true">
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think 2s" enabled="true">
             <stringProp name="ConstantTimer.delay">2000</stringProp>
           </ConstantTimer>
           <hashTree/>
@@ -190,7 +176,6 @@ BASE_URL, RELEASE_VERSION, DURATION, THREADS are passed via -J flags from the Je
 
       </hashTree>
 
-      <!-- Summary report written to stdout in non-GUI mode -->
       <ResultCollector guiclass="SummaryReport" testclass="ResultCollector" testname="Summary Report" enabled="true">
         <boolProp name="ResultCollector.error_logging">false</boolProp>
         <objProp>
