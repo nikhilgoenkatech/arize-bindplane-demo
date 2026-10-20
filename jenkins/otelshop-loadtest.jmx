@@ -55,6 +55,10 @@
               <stringProp name="Header.name">User-Agent</stringProp>
               <stringProp name="Header.value">JMeter-OtelShop/${RELEASE_VERSION}</stringProp>
             </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">x-dynatrace-test</stringProp>
+              <stringProp name="Header.value">load-test-id=${RELEASE_VERSION};load-test-name=otelshop-loadtest</stringProp>
+            </elementProp>
           </collectionProp>
         </HeaderManager>
         <hashTree/>
