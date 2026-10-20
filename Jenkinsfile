@@ -431,7 +431,7 @@ void sendCustomAnnotation(Map args) {
     def payload = [
         'eventType'     : 'CUSTOM_ANNOTATION',
         'title'         : args.title,
-        'entitySelector': 'type(SERVICE),entityId("SERVICE-E2892DDC1AA64598")',
+        'entitySelector': 'type(SERVICE),entityId("SERVICE-92E8D79E2DE8E913")',
         'properties'    : [
             'dt.event.description': args.description,
             'load.test.tool'      : 'JMeter',

@@ -11,10 +11,23 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import logger from './logger';
 
+const LOAD_TEST_HEADERS = [
+  'x-load-test-id',
+  'x-load-test-scenario',
+  'x-load-test-tool',
+  'x-load-test-vusers',
+] as const;
+
 const InstrumentationMiddleware = (handler: NextApiHandler): NextApiHandler => {
   return async (request, response) => {
     const span = trace.getSpan(context.active()) as Span;
     const urlPath = request.url?.split('?', 1)[0];
+
+    // Promote load test headers to span attributes so Dynatrace can filter them.
+    for (const header of LOAD_TEST_HEADERS) {
+      const value = request.headers[header];
+      if (value) span.setAttribute(header.replace(/-/g, '_'), value as string);
+    }
 
     let httpStatus = 200;
     try {
