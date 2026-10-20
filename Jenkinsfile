@@ -431,13 +431,14 @@ void sendCustomAnnotation(Map args) {
     def payload = [
         'eventType'     : 'CUSTOM_ANNOTATION',
         'title'         : args.title,
-        'entitySelector': 'entityId(K8S_SERVICE-3BBEE0582F42B1E8)',
+        'entitySelector': 'type(SERVICE),entityId("SERVICE-E2892DDC1AA64598")',
         'properties'    : [
-            'description'    : args.description,
-            'source'         : args.source,
-            'release.version': args.releaseVersion,
-            'pipeline.job'   : env.JOB_NAME,
-            'pipeline.build' : env.BUILD_ID,
+            'dt.event.description': args.description,
+            'load.test.tool'      : 'JMeter',
+            'load.test.users'     : '10',
+            'load.test.release'   : args.releaseVersion,
+            'pipeline.job'        : env.JOB_NAME,
+            'pipeline.build'      : env.BUILD_ID,
         ]
     ]
     def body = writeJSON(json: payload, returnText: true)

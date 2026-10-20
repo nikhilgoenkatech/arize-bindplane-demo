@@ -59,6 +59,22 @@
               <stringProp name="Header.name">x-dynatrace-test</stringProp>
               <stringProp name="Header.value">load-test-id=${RELEASE_VERSION};load-test-name=otelshop-loadtest</stringProp>
             </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">x-load-test-id</stringProp>
+              <stringProp name="Header.value">${RELEASE_VERSION}</stringProp>
+            </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">x-load-test-scenario</stringProp>
+              <stringProp name="Header.value">otelshop-browse-flow</stringProp>
+            </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">x-load-test-tool</stringProp>
+              <stringProp name="Header.value">jmeter</stringProp>
+            </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">x-load-test-vusers</stringProp>
+              <stringProp name="Header.value">${__P(THREADS,10)}</stringProp>
+            </elementProp>
           </collectionProp>
         </HeaderManager>
         <hashTree/>
