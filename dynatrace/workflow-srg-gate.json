@@ -1,0 +1,60 @@
+{
+  "title": "ai-agent-release-gate",
+  "description": "Listens for guardian.validation.triggered from Jenkins, evaluates AI agent quality via Grail, and calls back to Jenkins to proceed or abort the release.",
+  "schemaVersion": 4,
+  "type": "STANDARD",
+  "input": {},
+  "result": null,
+  "hourlyExecutionLimit": 1000,
+  "guide": null,
+  "trigger": {
+    "eventTrigger": {
+      "isActive": true,
+      "triggerConfiguration": {
+        "type": "event",
+        "value": {
+          "query": "event.type == \"guardian.validation.triggered\" AND event.provider == \"jenkins\"",
+          "eventType": "bizevents"
+        }
+      }
+    }
+  },
+  "tasks": {
+    "fetch_eval_result": {
+      "name": "fetch_eval_result",
+      "description": "Query Grail for the AI eval bizevent matching this release.version.",
+      "action": "dynatrace.automations:run-javascript",
+      "position": { "x": -1, "y": 1 },
+      "predecessors": [],
+      "input": {
+        "script": "import { queryExecutionClient } from \"@dynatrace-sdk/client-query\";\nimport { executionsClient } from \"@dynatrace-sdk/client-automation\";\n\nexport default async function ({ execution_id }) {\n  const execution = await executionsClient.getExecution({ id: execution_id });\n  const event = execution.params?.event;\n  const releaseVersion = event[\"release.version\"];\n  console.log(\"Fetching eval result for release.version:\", releaseVersion);\n\n  const dql = 'fetch bizevents | filter event.type == \"ai_agent.eval.experiment_completed\" | filter `release.version` == \"' + releaseVersion + '\" | limit 1';\n\n  const result = await queryExecutionClient.queryExecute({\n    body: {\n      query: dql,\n      requestTimeoutMilliseconds: 15000,\n      maxResultRecords: 1\n    }\n  });\n\n  const record = result.result?.records?.[0] ?? null;\n  console.log(\"Eval record:\", JSON.stringify(record));\n  return record;\n}"
+      }
+    },
+    "srg_check_stub": {
+      "name": "srg_check_stub",
+      "description": "Stub for Site Reliability Guardian on operational signals. Replace with dynatrace.site.reliability.guardian:validate-guardian-action once an SRG is configured.",
+      "action": "dynatrace.automations:run-javascript",
+      "position": { "x": 1, "y": 1 },
+      "predecessors": [],
+      "input": {
+        "script": "export default async function ({ execution_id }) {\n  console.log(\"SRG stub — returning pass unconditionally\");\n  return { validation_status: \"pass\", reason: \"stub — operational SRG not yet configured\" };\n}"
+      }
+    },
+    "decide_and_callback": {
+      "name": "decide_and_callback",
+      "description": "Combines eval and SRG results then calls Jenkins proceed or abort URL.",
+      "action": "dynatrace.automations:run-javascript",
+      "position": { "x": 0, "y": 2 },
+      "predecessors": ["fetch_eval_result", "srg_check_stub"],
+      "conditions": {
+        "states": {
+          "fetch_eval_result": "OK",
+          "srg_check_stub": "OK"
+        }
+      },
+      "input": {
+        "script": "import { executionsClient } from \"@dynatrace-sdk/client-automation\";\nimport { credentialVaultClient } from \"@dynatrace-sdk/client-platform-management\";\n\nexport default async function ({ execution_id }) {\n  const execution = await executionsClient.getExecution({ id: execution_id });\n  const event = execution.params?.event;\n\n  const releaseVersion = event[\"release.version\"];\n  const proceedUrl     = event[\"jenkins.proceed.url\"];\n  const abortUrl       = event[\"jenkins.abort.url\"];\n\n  const evalRecord = await executionsClient.getTaskExecutionResult({ executionId: execution_id, id: \"fetch_eval_result\" });\n  const srgResult  = await executionsClient.getTaskExecutionResult({ executionId: execution_id, id: \"srg_check_stub\" });\n\n  const evalPassed = evalRecord?.[\"eval.overall.passed\"] === true;\n  const srgPassed  = srgResult?.validation_status === \"pass\";\n  const passed     = evalPassed && srgPassed;\n\n  console.log(\"release.version     :\", releaseVersion);\n  console.log(\"eval.overall.passed :\", evalPassed, \"| avg_score:\", evalRecord?.[\"eval.overall.avg_score\"]);\n  console.log(\"srg.passed          :\", srgPassed);\n  console.log(\"Final decision      :\", passed ? \"PROCEED\" : \"ABORT\");\n\n  const cred = await credentialVaultClient.getCredential({ id: \"CREDENTIALS_VAULT-7EC7D48C59CAF90C\" });\n  const basicAuth = btoa(cred.username + \":\" + cred.password);\n  const targetUrl = passed ? proceedUrl : abortUrl;\n\n  console.log(\"Calling Jenkins:\", targetUrl);\n  const response = await fetch(targetUrl, {\n    method: \"POST\",\n    headers: { \"Authorization\": \"Basic \" + basicAuth }\n  });\n\n  console.log(\"Jenkins response:\", response.status);\n  return { passed: passed, action: passed ? \"proceed\" : \"abort\", jenkinsStatus: response.status };\n}"
+      }
+    }
+  }
+}

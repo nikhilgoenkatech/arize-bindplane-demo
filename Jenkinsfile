@@ -213,10 +213,6 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     ])
                 }
 
-                // kubectl (via the kubeconfig aws eks update-kubeconfig writes) calls out to
-                // `aws eks get-token` on every invocation rather than embedding static
-                // credentials — so update-kubeconfig AND the kubectl port-forward calls
-                // inside port-forward.sh both need AWS creds present, hence one shared block.
                 withCredentials([
                     string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY'),
@@ -227,14 +223,49 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME} --kubeconfig ${KUBECONFIG}
                     '''
 
+                    script {
+                        // Discover OtelShop frontend-proxy endpoint at runtime — works across
+                        // restarts/redeployments without any hardcoded hostname or IP.
+                        def frontendHost = sh(
+                            script: "kubectl get svc frontend-proxy -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
+                            returnStdout: true
+                        ).trim()
+                        env.FRONTEND_URL = "http://${frontendHost}:8080"
+                        echo "OtelShop frontend: ${env.FRONTEND_URL}"
+
+                        sendCustomAnnotation(
+                            title: "Load Test Started",
+                            description: "JMeter load test started for release ${env.RELEASE_ID}",
+                            source: "jenkins-pipeline",
+                            releaseVersion: env.RELEASE_ID
+                        )
+                    }
+
+                    sh '''
+                        /usr/bin/apache-jmeter/bin/jmeter -n \
+                            -t jenkins/otelshop-loadtest.jmx \
+                            -JBASE_URL=${FRONTEND_URL} \
+                            -JRELEASE_VERSION=${RELEASE_ID} \
+                            -JDURATION=120 \
+                            -JTHREADS=10 \
+                            -l /tmp/jmeter-results-${BUILD_ID}.jtl \
+                            -e -o /tmp/jmeter-report-${BUILD_ID} || true
+                    '''
+
+                    script {
+                        sendCustomAnnotation(
+                            title: "Load Test Finished",
+                            description: "JMeter load test completed for release ${env.RELEASE_ID}",
+                            source: "jenkins-pipeline",
+                            releaseVersion: env.RELEASE_ID
+                        )
+                    }
+
                     // JENKINS_NODE_COOKIE=dontKillMe stops Jenkins' process-tree killer from
                     // reaping the backgrounded kubectl port-forward processes once this step
                     // ends — without it they die before the next steps can reach Phoenix/agent.
-                    // The AWS creds only need to be present at launch — kubectl's exec-plugin
-                    // caches/refreshes tokens from the env this backgrounded process already has.
                     sh 'JENKINS_NODE_COOKIE=dontKillMe bash arize/port-forward.sh'
 
-                    // Wait for Phoenix to actually accept connections before running evals.
                     sh '''
                         echo "Waiting for Phoenix on localhost:6006..."
                         for i in $(seq 1 15); do
@@ -388,6 +419,34 @@ void sendSdlcEvent(Map fields) {
                 -H "Authorization: Bearer ${SDLC_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "${SDLC_BODY}"
+            set -x
+        '''
+    }
+}
+
+// Sends a CUSTOM_ANNOTATION event to Dynatrace via the Events API v2.
+// Shows up on entity timelines — used for load test start/stop markers.
+// Requires the classic DT_API_TOKEN with events:write scope.
+void sendCustomAnnotation(Map args) {
+    def payload = [
+        'eventType'  : 'CUSTOM_ANNOTATION',
+        'title'      : args.title,
+        'properties' : [
+            'description'    : args.description,
+            'source'         : args.source,
+            'release.version': args.releaseVersion,
+            'pipeline.job'   : env.JOB_NAME,
+            'pipeline.build' : env.BUILD_ID,
+        ]
+    ]
+    def body = writeJSON(json: payload, returnText: true)
+    withEnv(["ANNOTATION_BODY=${body}"]) {
+        sh '''
+            set +x
+            curl -sS -X POST "${DT_CLASSIC_URL}/api/v2/events/ingest" \
+                -H "Authorization: Api-Token ${DT_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "${ANNOTATION_BODY}"
             set -x
         '''
     }
