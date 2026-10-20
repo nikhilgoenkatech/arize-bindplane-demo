@@ -429,9 +429,10 @@ void sendSdlcEvent(Map fields) {
 // Requires the classic DT_API_TOKEN with events:write scope.
 void sendCustomAnnotation(Map args) {
     def payload = [
-        'eventType'  : 'CUSTOM_ANNOTATION',
-        'title'      : args.title,
-        'properties' : [
+        'eventType'     : 'CUSTOM_ANNOTATION',
+        'title'         : args.title,
+        'entitySelector': 'entityId(K8S_SERVICE-3BBEE0582F42B1E8)',
+        'properties'    : [
             'description'    : args.description,
             'source'         : args.source,
             'release.version': args.releaseVersion,
