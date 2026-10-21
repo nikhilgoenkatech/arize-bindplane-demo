@@ -139,9 +139,6 @@ pipeline {
                           -f k8s-values-bindplane.yaml \
                           --set components.agent.env[11].value="${RELEASE_ID}" \
                           --set components.agent.env[12].value="${TAG}" \
-                          --set components.frontend.imageOverride.repository=nikhilgoenka/otelshop-frontend \
-                          --set components.frontend.imageOverride.tag=latest \
-                          --set components.frontend.imageOverride.pullPolicy=Always \
                           -n ${K8S_NAMESPACE} --create-namespace
 
                         # NOTE: assumes the chart names this deployment exactly "agent" —
