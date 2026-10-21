@@ -14,8 +14,31 @@ const {containerDetector} = require('@opentelemetry/resource-detector-container'
 const {gcpDetector} = require('@opentelemetry/resource-detector-gcp');
 const {envDetector, hostDetector, osDetector, processDetector} = require('@opentelemetry/resources');
 
+// Promotes x-load-test-* and x-release-version HTTP request headers to span
+// attributes on every server-side span so Dynatrace can filter load test traces.
+const loadTestSpanProcessor = {
+  onStart(span) {
+    const headers = span.attributes;
+    const mapping = {
+      'http.request.header.x-load-test-id'      : 'load_test.id',
+      'http.request.header.x-load-test-scenario': 'load_test.scenario',
+      'http.request.header.x-load-test-tool'    : 'load_test.tool',
+      'http.request.header.x-load-test-vusers'  : 'load_test.vusers',
+      'http.request.header.x-release-version'   : 'release.version',
+    };
+    for (const [src, dest] of Object.entries(mapping)) {
+      const val = headers[src];
+      if (val !== undefined) span.setAttribute(dest, Array.isArray(val) ? val[0] : val);
+    }
+  },
+  onEnd() {},
+  shutdown() { return Promise.resolve(); },
+  forceFlush() { return Promise.resolve(); },
+};
+
 const sdk = new opentelemetry.NodeSDK({
   traceExporter: new OTLPTraceExporter(),
+  spanProcessors: [loadTestSpanProcessor],
   logRecordProcessors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
   instrumentations: [
     getNodeAutoInstrumentations({
