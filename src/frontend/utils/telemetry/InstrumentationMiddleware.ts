@@ -26,6 +26,7 @@ const InstrumentationMiddleware = (handler: NextApiHandler): NextApiHandler => {
 
     for (const [header, attrKey] of Object.entries(LOAD_TEST_HEADERS)) {
       const value = request.headers[header];
+      logger.info({ header, value: value ?? null }, 'load-test-header-check');
       if (value) span.setAttribute(attrKey, value as string);
     }
 
