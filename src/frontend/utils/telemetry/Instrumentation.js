@@ -14,45 +14,9 @@ const {containerDetector} = require('@opentelemetry/resource-detector-container'
 const {gcpDetector} = require('@opentelemetry/resource-detector-gcp');
 const {envDetector, hostDetector, osDetector, processDetector} = require('@opentelemetry/resources');
 
-// Promotes x-load-test-* and x-release-version HTTP request headers to span
-// attributes on every server-side span so Dynatrace can filter load test traces.
-const loadTestSpanProcessor = {
-  onStart(span) {
-    const headers = span.attributes;
-    // Temporary: log all http.request.header.* attrs to confirm what Envoy forwards
-    const headerKeys = Object.keys(headers).filter(k => k.startsWith('http.request.header.'));
-    if (headerKeys.length > 0) {
-      console.log('[loadTestSpanProcessor] span:', span.name, '| headers:', JSON.stringify(Object.fromEntries(headerKeys.map(k => [k, headers[k]]))));
-    }
-    const mapping = {
-      'http.request.header.x-load-test-id'      : 'load_test.id',
-      'http.request.header.x-load-test-scenario': 'load_test.scenario',
-      'http.request.header.x-load-test-tool'    : 'load_test.tool',
-      'http.request.header.x-load-test-vusers'  : 'load_test.vusers',
-      'http.request.header.x-release-version'   : 'release.version',
-    };
-    let promoted = false;
-    for (const [src, dest] of Object.entries(mapping)) {
-      const val = headers[src];
-      if (val !== undefined) {
-        span.setAttribute(dest, Array.isArray(val) ? val[0] : val);
-        promoted = true;
-      }
-    }
-    if (promoted) {
-      console.log('[loadTestSpanProcessor] promoted load test attrs on span:', span.name,
-        '| load_test.id:', headers['http.request.header.x-load-test-id'],
-        '| release.version:', headers['http.request.header.x-release-version']);
-    }
-  },
-  onEnd() {},
-  shutdown() { return Promise.resolve(); },
-  forceFlush() { return Promise.resolve(); },
-};
 
 const sdk = new opentelemetry.NodeSDK({
   traceExporter: new OTLPTraceExporter(),
-  spanProcessors: [loadTestSpanProcessor],
   logRecordProcessors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
   instrumentations: [
     getNodeAutoInstrumentations({
@@ -60,16 +24,22 @@ const sdk = new opentelemetry.NodeSDK({
         enabled: false,
       },
       '@opentelemetry/instrumentation-http': {
-        headersToSpanAttributes: {
-          server: {
-            requestHeaders: [
-              'x-load-test-id',
-              'x-load-test-scenario',
-              'x-load-test-tool',
-              'x-load-test-vusers',
-              'x-release-version',
-            ],
-          },
+        applyCustomAttributesOnSpan: (span, request) => {
+          const headers = request.headers || {};
+          const mapping = {
+            'x-load-test-id'      : 'load_test.id',
+            'x-load-test-scenario': 'load_test.scenario',
+            'x-load-test-tool'    : 'load_test.tool',
+            'x-load-test-vusers'  : 'load_test.vusers',
+            'x-release-version'   : 'release.version',
+          };
+          for (const [header, attr] of Object.entries(mapping)) {
+            const val = headers[header];
+            if (val) {
+              span.setAttribute(attr, val);
+              console.log('[loadTest] set', attr, '=', val, 'on span:', span.name);
+            }
+          }
         },
       },
     })
