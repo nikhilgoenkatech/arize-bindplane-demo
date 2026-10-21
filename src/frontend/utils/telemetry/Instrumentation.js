@@ -26,9 +26,18 @@ const loadTestSpanProcessor = {
       'http.request.header.x-load-test-vusers'  : 'load_test.vusers',
       'http.request.header.x-release-version'   : 'release.version',
     };
+    let promoted = false;
     for (const [src, dest] of Object.entries(mapping)) {
       const val = headers[src];
-      if (val !== undefined) span.setAttribute(dest, Array.isArray(val) ? val[0] : val);
+      if (val !== undefined) {
+        span.setAttribute(dest, Array.isArray(val) ? val[0] : val);
+        promoted = true;
+      }
+    }
+    if (promoted) {
+      console.log('[loadTestSpanProcessor] promoted load test attrs on span:', span.name,
+        '| load_test.id:', headers['http.request.header.x-load-test-id'],
+        '| release.version:', headers['http.request.header.x-release-version']);
     }
   },
   onEnd() {},
