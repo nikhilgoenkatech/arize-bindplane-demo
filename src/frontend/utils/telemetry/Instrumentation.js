@@ -56,9 +56,21 @@ const sdk = new opentelemetry.NodeSDK({
   logRecordProcessors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
   instrumentations: [
     getNodeAutoInstrumentations({
-      // disable fs instrumentation to reduce noise
       '@opentelemetry/instrumentation-fs': {
         enabled: false,
+      },
+      '@opentelemetry/instrumentation-http': {
+        headersToSpanAttributes: {
+          server: {
+            requestHeaders: [
+              'x-load-test-id',
+              'x-load-test-scenario',
+              'x-load-test-tool',
+              'x-load-test-vusers',
+              'x-release-version',
+            ],
+          },
+        },
       },
     })
   ],
