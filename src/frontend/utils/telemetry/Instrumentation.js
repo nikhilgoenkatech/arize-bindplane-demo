@@ -19,6 +19,11 @@ const {envDetector, hostDetector, osDetector, processDetector} = require('@opent
 const loadTestSpanProcessor = {
   onStart(span) {
     const headers = span.attributes;
+    // Temporary: log all http.request.header.* attrs to confirm what Envoy forwards
+    const headerKeys = Object.keys(headers).filter(k => k.startsWith('http.request.header.'));
+    if (headerKeys.length > 0) {
+      console.log('[loadTestSpanProcessor] span:', span.name, '| headers:', JSON.stringify(Object.fromEntries(headerKeys.map(k => [k, headers[k]]))));
+    }
     const mapping = {
       'http.request.header.x-load-test-id'      : 'load_test.id',
       'http.request.header.x-load-test-scenario': 'load_test.scenario',
