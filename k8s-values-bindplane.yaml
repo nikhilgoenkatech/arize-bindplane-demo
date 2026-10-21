@@ -93,12 +93,6 @@ opentelemetry-collector:
 # Component overrides (identical to vanilla — only the collector destination changed)
 # =============================================================================
 components:
-  frontend:
-    image:
-      repository: nikhilgoenka/otelshop-frontend
-      tag: latest
-      pullPolicy: Always
-
   frontend-proxy:
     service:
       type: LoadBalancer
