@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jmeter-loadtest
+  namespace: llm-obs-demo
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      annotations:
+        oneagent.dynatrace.com/inject: "false"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: jmeter
+          image: justb4/jmeter:5.6.3
+          args:
+            - "-n"
+            - "-t"
+            - "/test/otelshop-loadtest.jmx"
+            - "-JBASE_URL=http://frontend-proxy:8080"
+            - "-JRELEASE_VERSION=$(RELEASE_VERSION)"
+            - "-JDURATION=120"
+            - "-JTHREADS=10"
+            - "-l"
+            - "/tmp/results.jtl"
+          env:
+            - name: RELEASE_VERSION
+              value: "dev"
+          volumeMounts:
+            - name: test-plan
+              mountPath: /test
+      volumes:
+        - name: test-plan
+          configMap:
+            name: jmeter-test-plan
