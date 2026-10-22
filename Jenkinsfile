@@ -242,23 +242,14 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     }
 
                     sh '''
-                        # Sync the JMX into the ConfigMap (idempotent)
-                        kubectl create configmap jmeter-test-plan \
-                          --from-file=otelshop-loadtest.jmx=jenkins/otelshop-loadtest.jmx \
-                          -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-
-                        # Delete any previous job run then launch fresh with RELEASE_ID
-                        kubectl delete job jmeter-loadtest -n ${K8S_NAMESPACE} --ignore-not-found
-                        sed "s/value: \\"dev\\"/value: \\"${RELEASE_ID}\\"/" k8s-jmeter-job-only.yaml \
-                          | kubectl create -f -
-
-                        # Wait for the job to complete (120s test + 15s ramp + image pull buffer)
-                        kubectl wait job/jmeter-loadtest \
-                          -n ${K8S_NAMESPACE} \
-                          --for=condition=complete \
-                          --timeout=600s || \
-                        kubectl logs -n ${K8S_NAMESPACE} \
-                          -l job-name=jmeter-loadtest --tail=100 2>/dev/null || true
+                        /usr/bin/apache-jmeter/bin/jmeter -n \
+                            -t jenkins/otelshop-loadtest.jmx \
+                            -JBASE_URL=${FRONTEND_URL} \
+                            -JRELEASE_VERSION=${RELEASE_ID} \
+                            -JDURATION=120 \
+                            -JTHREADS=10 \
+                            -l /tmp/jmeter-results-${BUILD_ID}.jtl \
+                            -e -o /tmp/jmeter-report-${BUILD_ID} || true
                     '''
 
                     script {
