@@ -230,6 +230,7 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                             script: "kubectl get svc frontend-proxy -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
                             returnStdout: true
                         ).trim()
+                        env.FRONTEND_HOST = frontendHost
                         env.FRONTEND_URL = "http://${frontendHost}:8080"
                         echo "OtelShop frontend: ${env.FRONTEND_URL}"
 
@@ -244,7 +245,8 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     sh '''
                         /usr/bin/apache-jmeter/bin/jmeter -n \
                             -t jenkins/otelshop-loadtest.jmx \
-                            -JBASE_URL=${FRONTEND_URL} \
+                            -JHOST=${FRONTEND_HOST} \
+                            -JPORT=8080 \
                             -JRELEASE_VERSION=${RELEASE_ID} \
                             -JDURATION=120 \
                             -JTHREADS=10 \
