@@ -242,26 +242,23 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     }
 
                     sh '''
-                        # Apply the JMX ConfigMap (idempotent)
+                        # Update the ConfigMap with the JMX (idempotent, Job spec excluded)
                         kubectl apply -f k8s-jmeter-job.yaml -n ${K8S_NAMESPACE}
 
-                        # Delete any previous run of the job, then patch RELEASE_VERSION and launch
+                        # Delete any previous job run
                         kubectl delete job jmeter-loadtest -n ${K8S_NAMESPACE} --ignore-not-found
-                        kubectl patch configmap jmeter-test-plan -n ${K8S_NAMESPACE} --type=json \
-                          -p="[]" > /dev/null 2>&1 || true
 
-                        # Create the job with the current RELEASE_ID injected
-                        cat k8s-jmeter-job.yaml \
-                          | sed "s/value: \\"dev\\"/value: \\"${RELEASE_ID}\\"/" \
+                        # Launch the job with RELEASE_ID substituted in
+                        sed "s/value: \\"dev\\"/value: \\"${RELEASE_ID}\\"/" k8s-jmeter-job.yaml \
                           | kubectl apply -f - -n ${K8S_NAMESPACE}
 
-                        # Wait for the job to complete (duration 120s + 60s buffer)
+                        # Wait for the job to complete (120s test + 15s ramp + 60s pod startup buffer)
                         kubectl wait job/jmeter-loadtest \
                           -n ${K8S_NAMESPACE} \
                           --for=condition=complete \
-                          --timeout=240s || \
+                          --timeout=300s || \
                         kubectl logs -n ${K8S_NAMESPACE} \
-                          -l job-name=jmeter-loadtest --tail=50
+                          -l job-name=jmeter-loadtest --tail=100 2>/dev/null || true
                     '''
 
                     script {

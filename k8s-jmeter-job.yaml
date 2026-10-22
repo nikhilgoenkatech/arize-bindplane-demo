@@ -168,6 +168,9 @@ metadata:
 spec:
   ttlSecondsAfterFinished: 300
   template:
+    metadata:
+      annotations:
+        oneagent.dynatrace.com/inject: "false"
     spec:
       restartPolicy: Never
       containers:
