@@ -44,7 +44,7 @@
           <collectionProp name="HeaderManager.headers">
             <elementProp name="" elementType="Header">
               <stringProp name="Header.name">x-load-test-id</stringProp>
-              <stringProp name="Header.value">${RELEASE_VERSION}</stringProp>
+              <stringProp name="Header.value">${__P(RELEASE_VERSION,dev)}</stringProp>
             </elementProp>
             <elementProp name="" elementType="Header">
               <stringProp name="Header.name">x-load-test-scenario</stringProp>
@@ -60,11 +60,11 @@
             </elementProp>
             <elementProp name="" elementType="Header">
               <stringProp name="Header.name">x-release-version</stringProp>
-              <stringProp name="Header.value">${RELEASE_VERSION}</stringProp>
+              <stringProp name="Header.value">${__P(RELEASE_VERSION,dev)}</stringProp>
             </elementProp>
             <elementProp name="" elementType="Header">
               <stringProp name="Header.name">User-Agent</stringProp>
-              <stringProp name="Header.value">JMeter-OtelShop/${RELEASE_VERSION}</stringProp>
+              <stringProp name="Header.value">JMeter-OtelShop/${__P(RELEASE_VERSION,dev)}</stringProp>
             </elementProp>
           </collectionProp>
         </HeaderManager>
