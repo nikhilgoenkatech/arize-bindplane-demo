@@ -242,15 +242,15 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                     }
 
                     sh '''
-                        # Update the ConfigMap with the JMX (idempotent, Job spec excluded)
-                        kubectl apply -f k8s-jmeter-job.yaml -n ${K8S_NAMESPACE}
+                        # Sync the JMX into the ConfigMap from the file directly
+                        kubectl create configmap jmeter-test-plan \
+                          --from-file=otelshop-loadtest.jmx=jenkins/otelshop-loadtest.jmx \
+                          -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
-                        # Delete any previous job run
+                        # Delete any previous job run then launch fresh with RELEASE_ID
                         kubectl delete job jmeter-loadtest -n ${K8S_NAMESPACE} --ignore-not-found
-
-                        # Launch the job with RELEASE_ID substituted in
                         sed "s/value: \\"dev\\"/value: \\"${RELEASE_ID}\\"/" k8s-jmeter-job.yaml \
-                          | kubectl apply -f - -n ${K8S_NAMESPACE}
+                          | kubectl create -f - -n ${K8S_NAMESPACE}
 
                         # Wait for the job to complete (120s test + 15s ramp + 60s pod startup buffer)
                         kubectl wait job/jmeter-loadtest \
