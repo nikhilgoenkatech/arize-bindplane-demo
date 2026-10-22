@@ -252,11 +252,11 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                         sed "s/value: \\"dev\\"/value: \\"${RELEASE_ID}\\"/" k8s-jmeter-job-only.yaml \
                           | kubectl create -f -
 
-                        # Wait for the job to complete (120s test + 15s ramp + 60s pod startup buffer)
+                        # Wait for the job to complete (120s test + 15s ramp + image pull buffer)
                         kubectl wait job/jmeter-loadtest \
                           -n ${K8S_NAMESPACE} \
                           --for=condition=complete \
-                          --timeout=300s || \
+                          --timeout=600s || \
                         kubectl logs -n ${K8S_NAMESPACE} \
                           -l job-name=jmeter-loadtest --tail=100 2>/dev/null || true
                     '''
