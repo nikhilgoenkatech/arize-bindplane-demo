@@ -246,7 +246,6 @@ with open('/tmp/demo.flagd.json', 'w') as f:
                         /usr/bin/apache-jmeter/bin/jmeter -n \
                             -t jenkins/otelshop-loadtest.jmx \
                             -JHOST=${FRONTEND_HOST} \
-                            -JPORT=8080 \
                             -JRELEASE_VERSION=${RELEASE_ID} \
                             -JDURATION=120 \
                             -JTHREADS=10 \
